@@ -1,0 +1,38 @@
+# 系统文件
+._*
+.codex/
+.DS_Store
+.DS_Store?
+.idea
+.Spotlight-V100
+.Trashes
+.vscode
+ehthumbs.db
+Thumbs.db
+
+# 依赖
+node_modules
+package-lock.json
+bun.lockb
+deno.lock
+
+# 编辑器配置
+jsconfig.json
+
+# 运行时文件
+Home
+localStorage.json
+
+# 文档（桌面上的无关 PDF）
+*.pdf
+
+# 构建产物
+app
+app.html
+main.js
+noname.ico
+game/*.zip
+downloadExtension.html
+update.html
+update.js
+noname-server.exe
