@@ -1681,6 +1681,11 @@ export default () => {
 							}
 						}
 					}
+					// DIY can be disabled in the normal character-pack settings, but it
+					// must remain available in Endless mode.
+					if (lib.characterPack.diy && lib.characterPack.diy.diy_zhangchunhua) {
+						lib.character.diy_zhangchunhua = lib.characterPack.diy.diy_zhangchunhua;
+					}
 					var list = [];
 					for (i in lib.character) {
 						// Endless free selection intentionally ignores the enabled character-pack

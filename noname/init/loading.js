@@ -127,6 +127,7 @@ export function loadCardPile() {
  */
 export function loadCharacter(character) {
 	let name = character.name;
+	const endlessMode = lib.config.mode === "endless" || (lib.config.mode === "versus" && get.config("versus_mode") === "endless");
 
 	if (character.character) {
 		const characterPack = lib.characterPack[name];
@@ -151,7 +152,7 @@ export function loadCharacter(character) {
 				lib.connectCharacterPack.push(name);
 				break;
 			case "character":
-				if (!lib.config.characters.includes(name) && lib.config.mode !== "connect" && lib.config.mode !== "endless") {
+				if (!lib.config.characters.includes(name) && lib.config.mode !== "connect" && !endlessMode) {
 					if (lib.config.mode === "chess" && get.config("chess_mode") === "leader" && get.config("chess_leader_allcharacter")) {
 						for (let charaName in value) {
 							// @ts-ignore
@@ -197,7 +198,7 @@ export function loadCharacter(character) {
 						}
 					}
 
-					if (key === "skill" && key2[0] === "_" && (lib.config.mode !== "connect" ? lib.config.mode !== "endless" && !lib.config.characters.includes(name) : !character.connect)) {
+					if (key === "skill" && key2[0] === "_" && (lib.config.mode !== "connect" ? !endlessMode && !lib.config.characters.includes(name) : !character.connect)) {
 						continue;
 					}
 
