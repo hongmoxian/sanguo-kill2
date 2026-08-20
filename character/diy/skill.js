@@ -129,9 +129,7 @@ const skills = {
 		filter(event, player) {
 			return player.countCards("h") > 0 && game.hasPlayer(current => player != current && player.canCompare(current));
 		},
-		direct: true,
-		content: function () {
-			"step 0";
+		async cost(event, trigger, player) {
 			const goon = player.hasCard(function (card) {
 				return get.value(card) <= 7;
 			}, "h");
@@ -7814,9 +7812,8 @@ const skills = {
 			prompt2: function (event, player) {
 			return "弃置一张手牌，然后弃置" + get.translation(event.player) + "的一张手牌。若两张牌颜色相同，你令其跳过此回合的摸牌阶段或出牌阶段。";
 		},
-		content: function () {
-			"step 0";
-			player
+		async cost(event, trigger, player) {
+			const result = await player
 				.chooseToDiscard("h", true)
 				.set("ai", function (card) {
 					var player = _status.event.player;
@@ -8082,7 +8079,6 @@ const skills = {
 	diy_zch_shendao: {
 		audio: ["diy_zch_shendao_v13_1.ogg"],
 		trigger: { global: "judge" },
-		direct: true,
 		filter: function (event, player) {
 			var judging = event.player.judging[0];
 			if (!judging) return false;
@@ -8093,13 +8089,12 @@ const skills = {
 			}
 			return false;
 		},
-		content: function () {
-			"step 0";
+		async cost(event, trigger, player) {
 			var list = player.getCards("h");
 			for (var i = 0; i < game.players.length; i++) {
 				list = list.concat(game.players[i].getCards("ej", card => card !== trigger.player.judging[0]));
 			}
-			player
+			const result = await player
 				.chooseButton([
 					get.translation(trigger.player) + "的判定为" + get.translation(trigger.player.judging[0]) + "，" + get.prompt("diy_zch_shendao"),
 					list,
@@ -8127,19 +8122,29 @@ const skills = {
 					if (attitude == 0 || result == 0) return 0;
 					return (attitude > 0 ? result : -result) - value;
 				});
-			"step 1";
-			if (!result.bool || !result.links || !result.links.length) return;
-			event.cards = result.links;
-			player.respond(event.cards, "diy_zch_shendao", "highlight", "noOrdering");
-			"step 2";
-			if (!result.bool) return;
-			const replacement = event.cards[0];
+			if (result.bool) {
+				event.result = {
+					bool: true,
+					cards: result.links,
+					cost_data: { cards: result.links },
+				};
+			}
+		},
+		async content(event, trigger, player) {
+			const cards = event.cards || (event.cost_data && event.cost_data.cards) || (event.result && event.result.cards);
+			const replacement = cards && cards[0];
 			if (!replacement || !trigger.player.judging[0]) return;
 			const judgeDelta = trigger.judge(replacement) - trigger.judge(trigger.player.judging[0]);
 			if (judgeDelta > 0) player.logAi([trigger.player], { name: "tao", isCard: true });
 			else if (judgeDelta < 0) player.logAi([trigger.player], { name: "sha", isCard: true });
-			// respond() resolves the actual owner and removes cards from hand,
-			// equipment, or judgment area consistently.
+			const owner = get.owner(replacement);
+			const position = get.position(replacement);
+			if (owner == player && position == "h") {
+				await player.respond(cards, "diy_zch_shendao", "highlight", "noOrdering");
+			} else if (owner) {
+				player.logSkill("diy_zch_shendao", trigger.player);
+				await owner.lose(cards, ui.ordering);
+			}
 			const original = trigger.player.judging[0];
 			if (original.clone) {
 				original.clone.classList.remove("thrownhighlight");
@@ -8151,11 +8156,11 @@ const skills = {
 			// Match the working rejudge skills: take the old judgment card out of
 			// the judge event before installing the replacement.
 			player.$gain2(original);
-			player.gain(original);
+			await player.gain(original);
 			trigger.player.judging[0] = replacement;
-			trigger.orderingCards.addArray(event.cards);
+			trigger.orderingCards.addArray(cards);
 			game.log(trigger.player, "的判定牌改为", replacement);
-			game.delay(2);
+			await game.delay(2);
 		},
 		ai: {
 			rejudge: true,
