@@ -1845,7 +1845,12 @@ game.import("card", function () {
 				},
 				content: function () {
 					let pos = get.is.single() ? "he" : "hej";
-					if (target.countGainableCards(player, pos)) player.gainPlayerCard(pos, target, true).set("target", target).set("complexSelect", false).set("ai", lib.card.shunshou.ai.button);
+					if (target.countGainableCards(player, pos)) {
+						let next = player.gainPlayerCard(pos, target, true).set("target", target).set("complexSelect", false).set("ai", lib.card.shunshou.ai.button);
+						// If only hand cards are available, show them so the player can choose.
+						let field = get.is.single() ? "e" : "ej";
+						if (!target.countGainableCards(player, field)) next.set("visible", true);
+					}
 				},
 				ai: {
 					wuxie: function (target, card, player, viewer) {
@@ -2120,7 +2125,11 @@ game.import("card", function () {
 						pos = "hej";
 						vis = undefined;
 					}
-					if (target.countDiscardableCards(player, pos)) player.discardPlayerCard(pos, target, true, vis).set("target", target).set("complexSelect", false).set("ai", lib.card.guohe.ai.button);
+					if (target.countDiscardableCards(player, pos)) {
+						let next = player.discardPlayerCard(pos, target, true, vis).set("target", target).set("complexSelect", false).set("ai", lib.card.guohe.ai.button);
+						// If only hand cards are available, show them so the player can choose.
+						if (!vis && !target.countDiscardableCards(player, "ej")) next.set("visible", true);
+					}
 				},
 				ai: {
 					wuxie: (target, card, player, viewer, status) => {

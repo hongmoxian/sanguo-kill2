@@ -457,9 +457,12 @@ export default () => {
 					_status.endlessLevel = 1;
 					_status.endlessCompleted = 0;
 					_status.endlessBest = lib.config.versus_endless_level || 0;
+					_status.endlessShaBonus = 0;
+					game.addGlobalSkill("endless_sha_bonus");
 					game.updateEndlessStatus();
 					var firstChoose = game.players[1];
 					game.gameDraw(firstChoose);
+					game.endlessMulligan(game.me);
 					game.phaseLoop(firstChoose);
 				} else if (_status.mode == "four") {
 					game.gameDraw(_status.firstAct, function (player) {
@@ -755,25 +758,57 @@ export default () => {
 					}
 				}
 			},
+			endlessMulligan: function (player) {
+				var next = game.createEvent("endlessMulligan", false, _status.event);
+				next.player = player;
+					next.setContent(async function (event) {
+						if (!event.player || event.player.isDead()) return;
+						for (var remaining = 3; remaining > 0; remaining--) {
+							if (!event.player.countCards("h")) break;
+							var result = await event.player
+							.chooseBool("是否更换手牌？（剩余" + remaining + "次）")
+							.set("ai", function () {
+								return false;
+							})
+							.forResult();
+						if (!result || !result.bool) break;
+						var cards = event.player.getCards("h");
+						if (!cards.length) break;
+						for (var i = 0; i < cards.length; i++) cards[i].discard(false);
+						var replacement = get.cards(cards.length);
+						event.player._start_cards = replacement;
+						event.player.directgain(replacement);
+					}
+				});
+				return next;
+			},
 			endlessMajorReward: async function (player) {
 				if (!player || player.isDead()) return;
-				var choices = ["体力上限+1并回复1点体力", "摸三张牌", "获得1点护甲"];
-				var result = await player
-					.chooseControl(choices)
-					.set("prompt", "大关通关奖励")
-					.set("ai", function () {
-						if (player.isDamaged()) return choices[0];
-						return choices[1];
-					})
-					.forResult();
-				var control = result && result.control;
-				if (control == choices[0]) {
-					await player.gainMaxHp();
-					await player.recover();
-				} else if (control == choices[1]) {
-					await player.draw(3);
-				} else {
-					await player.changeHujia(1);
+				var choices = ["体力上限+1并回复1点体力", "摸三张牌", "获得1点护甲", "出杀次数上限+1"];
+				var available = choices.slice(0);
+				for (var count = 0; count < 2 && available.length; count++) {
+					var result = await player
+						.chooseControl(available)
+						.set("prompt", "大关通关奖励（4选2，第" + (count + 1) + "项）")
+						.set("ai", function () {
+							if (player.isDamaged() && available.includes("体力上限+1并回复1点体力")) return "体力上限+1并回复1点体力";
+							if (available.includes("出杀次数上限+1")) return "出杀次数上限+1";
+							return available[0];
+						})
+						.forResult();
+					var control = result && result.control;
+					if (!control || !available.includes(control)) break;
+					available.splice(available.indexOf(control), 1);
+					if (control == choices[0]) {
+						await player.gainMaxHp();
+						await player.recover();
+					} else if (control == choices[1]) {
+						await player.draw(3);
+					} else if (control == choices[2]) {
+						await player.changeHujia(1);
+					} else if (control == choices[3]) {
+						_status.endlessShaBonus = (_status.endlessShaBonus || 0) + 1;
+					}
 				}
 			},
 			endlessSwapAtMajorEnd: async function (player) {
@@ -860,6 +895,7 @@ export default () => {
 					if (enteredMajor) {
 						await game.endlessMajorReward(game.me);
 						await game.endlessSwapAtMajorEnd(game.me);
+						await game.endlessMulligan(game.me);
 					}
 					game.endlessPrepareEnemies(true);
 					game.updateEndlessStatus();
@@ -5112,6 +5148,17 @@ export default () => {
 			endless_swap_info: "无尽模式中，你可以在回合开始或结束时消耗5金币更换备用武将。",
 		},
 			skill: {
+			endless_sha_bonus: {
+				charlotte: true,
+				silent: true,
+				mod: {
+					cardUsable: function (card, player, num) {
+						if (_status.mode == "endless" && player.side && card.name == "sha") {
+							return num + (_status.endlessShaBonus || 0);
+						}
+					},
+				},
+			},
 			endless_stage_clear: {
 				charlotte: true,
 				forced: true,
