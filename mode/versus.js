@@ -1751,9 +1751,31 @@ export default () => {
 					} else event.goto(2);
 					"step 1";
 					if (event.saved && result.control == "继续无尽存档") {
+						// 恢复存档前补齐角色包，避免角色尚未注册导致初始化崩溃。
+						for (var packName in lib.characterPack) {
+							var characterPack = lib.characterPack[packName];
+							if (!characterPack || Array.isArray(characterPack)) continue;
+							for (var characterName in characterPack) {
+								if (!lib.character[characterName]) lib.character[characterName] = characterPack[characterName];
+							}
+						}
+						if (lib.characterPack.diy && lib.characterPack.diy.diy_zhangchunhua) {
+							lib.character.diy_zhangchunhua = lib.characterPack.diy.diy_zhangchunhua;
+						}
+						var savedPlayer = event.saved.player && event.saved.player.name;
+						if (!savedPlayer || !lib.character[savedPlayer]) {
+							game.clearEndlessSave();
+							event.saved = null;
+							event.goto(2);
+							return;
+						}
 						_status.endlessRestore = event.saved;
-						event.selected = [event.saved.player.name].concat(event.saved.reserve || []).slice(0, 3);
-						event.list = (event.saved.list || []).slice(0);
+						event.selected = [savedPlayer].concat(event.saved.reserve || []).filter(function (name) {
+							return !!lib.character[name];
+						}).slice(0, 3);
+						event.list = (event.saved.list || []).filter(function (name) {
+							return !!lib.character[name] && !event.selected.includes(name);
+						}).slice(0);
 						_status.endlessListAll = event.list.slice(0);
 						event.goto(5);
 					} else {
