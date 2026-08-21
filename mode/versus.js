@@ -147,7 +147,7 @@ export default () => {
 			} else if (_status.mode == "two") {
 				game.prepareArena(4);
 			} else if (lib.config.mode === "endless" || _status.mode == "endless") {
-				// 无尽模式按大关递进为 1v1 至 1v7，预留完整的八人座位链。
+				// 无尽模式从 1v3 开始，预留完整的八人座位链。
 				game.prepareArena(8);
 			} else if (_status.mode == "three") {
 				if (lib.character.wenpin) lib.character.wenpin[3] = ["zhenwei_three"];
@@ -452,17 +452,21 @@ export default () => {
 				} else if (_status.mode == "endless") {
 					_status.first_less = true;
 					_status.first_less_forced = true;
-					_status.endlessBig = 1;
-					_status.endlessSmall = 1;
-					_status.endlessLevel = 1;
-					_status.endlessCompleted = 0;
+					var endlessSave = _status.endlessRestore;
+					_status.endlessBig = endlessSave ? endlessSave.big : 3;
+					_status.endlessSmall = endlessSave ? endlessSave.small : 1;
+					_status.endlessLevel = _status.endlessBig;
+					_status.endlessCompleted = endlessSave ? endlessSave.completed : 0;
 					_status.endlessBest = lib.config.versus_endless_level || 0;
-					_status.endlessShaBonus = 0;
+					_status.endlessShaBonus = endlessSave ? endlessSave.shaBonus : 0;
 					game.addGlobalSkill("endless_sha_bonus");
+					game.endlessPrepareEnemies(false);
 					game.updateEndlessStatus();
 					var firstChoose = game.players[1];
 					game.gameDraw(firstChoose);
 					game.endlessMulligan(game.me);
+					game.cacheEndlessProgress(game.me);
+					delete _status.endlessRestore;
 					game.phaseLoop(firstChoose);
 				} else if (_status.mode == "four") {
 					game.gameDraw(_status.firstAct, function (player) {
@@ -692,6 +696,35 @@ export default () => {
 				}
 				return list.randomRemove();
 			},
+			getEndlessSave: function () {
+				try {
+					var save = JSON.parse(localStorage.getItem(lib.configprefix + "endless_save"));
+					if (save && save.version == 1 && save.player && typeof save.player.name == "string") return save;
+				} catch (e) {}
+				return null;
+			},
+			clearEndlessSave: function () {
+				localStorage.removeItem(lib.configprefix + "endless_save");
+			},
+			cacheEndlessProgress: function (player) {
+				if (_status.mode != "endless" || !player || !player.name1) return;
+				var save = {
+					version: 1,
+					big: _status.endlessBig || 3,
+					small: _status.endlessSmall || 1,
+					completed: _status.endlessCompleted || 0,
+					shaBonus: _status.endlessShaBonus || 0,
+					player: {
+						name: player.name1,
+						hp: player.hp,
+						maxHp: player.maxHp,
+						hujia: player.hujia || 0,
+					},
+					reserve: (_status.endlessReserve || []).slice(0),
+					list: (_status.endlessList || []).slice(0),
+				};
+				localStorage.setItem(lib.configprefix + "endless_save", JSON.stringify(save));
+			},
 			endlessInitCharacter: function (player, name, side) {
 				if (!player) return;
 				// Skill triggers are only registered for players that already have a playerid.
@@ -865,6 +898,7 @@ export default () => {
 					var enteredMajor = false;
 					if (_status.endlessSmall >= 99) {
 						if (_status.endlessBig >= 7) {
+							game.clearEndlessSave();
 							game.saveConfig("versus_endless_level", _status.endlessCompleted);
 							game.over(true);
 							event.finish();
@@ -899,6 +933,7 @@ export default () => {
 					}
 					game.endlessPrepareEnemies(true);
 					game.updateEndlessStatus();
+					game.cacheEndlessProgress(game.me);
 				});
 				return next;
 			},
@@ -1705,6 +1740,27 @@ export default () => {
 				next.setContent(function () {
 					"step 0";
 					ui.arena.classList.add("choose-character");
+					var saved = game.getEndlessSave();
+					if (saved) {
+						game.me.chooseControl("继续无尽存档", "开始新的无尽游戏")
+							.set("prompt", "检测到无尽模式存档（" + saved.big + "-" + saved.small + "），是否继续？")
+							.set("ai", function () {
+								return "继续无尽存档";
+							});
+						event.saved = saved;
+					} else event.goto(2);
+					"step 1";
+					if (event.saved && result.control == "继续无尽存档") {
+						_status.endlessRestore = event.saved;
+						event.selected = [event.saved.player.name].concat(event.saved.reserve || []).slice(0, 3);
+						event.list = (event.saved.list || []).slice(0);
+						_status.endlessListAll = event.list.slice(0);
+						event.goto(5);
+					} else {
+						game.clearEndlessSave();
+						event.goto(2);
+					}
+					"step 2";
 					// Character packs are imported before the splash selection and disabled packs
 					// only live in characterPack. Merge them here so switching into endless from
 					// another mode still gets the complete selection pool.
@@ -1738,8 +1794,8 @@ export default () => {
 					event.list = list;
 					event.selected = [];
 					_status.endlessListAll = list.slice(0);
-					event.goto(1);
-					"step 1";
+					event.goto(3);
+					"step 3";
 					// 官网规则是每轮从已有武将中自由选择，不是固定随机候选池。
 					// Use the full character browser instead of a compact candidate-button list.
 					var dialog = ui.create.characterDialog(
@@ -1767,16 +1823,23 @@ export default () => {
 					}
 					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
 					game.me.chooseButton(dialog, true).set("onfree", true);
-					"step 2";
+					"step 4";
 					event.selected.push(result.links[0]);
 					event.list.remove(result.links[0]);
 					if (event.selected.length < 3) {
-						event.goto(1);
+						event.goto(3);
 						return;
 					}
+					"step 5";
 					_status.endlessReserve = event.selected.slice(1);
-					_status.endlessList = event.list;
+					_status.endlessList = event.saved && event.saved.list ? event.saved.list.slice(0) : event.list;
 					game.endlessInitCharacter(game.players[0], event.selected[0], true);
+					if (event.saved && event.saved.player) {
+						game.players[0].maxHp = event.saved.player.maxHp;
+						game.players[0].hp = event.saved.player.hp;
+						game.players[0].hujia = event.saved.player.hujia || 0;
+						game.players[0].update();
+					}
 					for (var i = 1; i < game.players.length; i++) {
 						game.endlessInitCharacter(game.players[i], game.getEndlessCharacter() || "re_guojia", false);
 					}
