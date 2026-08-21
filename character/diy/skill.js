@@ -116,6 +116,7 @@ const skills = {
 			},
 			blocker: {
 				charlotte: true,
+				content() {},
 				init(player, skill) {
 					player.addSkillBlocker(skill);
 				},
