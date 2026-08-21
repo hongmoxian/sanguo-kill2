@@ -100,6 +100,36 @@ const skills = {
 			},
 		},
 	},
+	diy_luoying: {
+		audio: ["diy_zch_luoying_v13_1.ogg"],
+		trigger: { global: ["loseAfter", "cardsDiscardAfter"] },
+		forced: true,
+		filter(event, player) {
+			if (event.name == "lose") {
+				if (event.type != "discard" || event.getlx === false) return false;
+				var cards = event.cards.slice(0);
+				var evt = event.getl(player);
+				if (evt && evt.cards) cards.removeArray(evt.cards);
+				return cards.some(card => card.original != "j" && get.suit(card, event.player) == "club" && get.position(card, true) == "d");
+			}
+			var evt = event.getParent().relatedEvent;
+			return !!evt && evt.name == "judge" && evt.player != player && event.cards.some(card => get.position(card, true) == "d" && get.suit(card) == "club");
+		},
+		async content(event, trigger, player) {
+			var cards = trigger.cards.slice(0);
+			if (trigger.name == "lose") {
+				var evt = trigger.getl(player);
+				if (evt && evt.cards) cards.removeArray(evt.cards);
+				cards = cards.filter(card => card.original != "j" && get.suit(card, trigger.player) == "club" && get.position(card, true) == "d");
+			} else {
+				cards = cards.filter(card => get.position(card, true) == "d" && get.suit(card) == "club");
+			}
+			if (cards.length) {
+				player.logSkill("diy_luoying");
+				await player.gain(cards, "gain2", "log");
+			}
+		},
+	},
 	//派对浪客
 	nsxingyun: {
 		audio: 1,
