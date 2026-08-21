@@ -27,6 +27,67 @@ const skills = {
 			},
 		},
 	},
+	diy_shayi: {
+		locked: true,
+		audio: 2,
+		trigger: { player: "phaseUseBegin" },
+		forced: true,
+		async content(event, trigger, player) {
+			await player.showHandcards();
+			if (player.hasCard(card => get.name(card) == "sha", "h")) player.draw();
+			else player.addTempSkill("diy_shayi_effect", "phaseUseEnd");
+		},
+		subSkill: {
+			effect: {
+				audio: false,
+				enable: "chooseToUse",
+				filter(event, player) {
+					return player.hasCard(card => get.color(card) == "black", "h") && event.filterCard({ name: "sha" }, player, event);
+				},
+				filterCard(card) {
+					return get.color(card) == "black";
+				},
+				position: "h",
+				viewAs: { name: "sha" },
+				selectCard: 1,
+				prompt: "将一张黑色牌当作【杀】使用",
+				mod: {
+					targetInRange(card) {
+						if (card.name == "sha") return true;
+					},
+					cardUsable(card) {
+						if (card.name == "sha") return Infinity;
+					},
+				},
+			},
+		},
+	},
+	diy_zhenhun: {
+		audio: 2,
+		enable: "phaseUse",
+		usable: 1,
+		filter(event, player) {
+			return player.countCards("he") > 0;
+		},
+		async content(event, trigger, player) {
+			await player.chooseToDiscard("he", true);
+			game.filterPlayer(target => target != player).forEach(target => target.addTempSkill("diy_zhenhun_blocker", "phaseUseEnd"));
+		},
+		subSkill: {
+			blocker: {
+				charlotte: true,
+				init(player, skill) {
+					player.addSkillBlocker(skill);
+				},
+				onremove(player, skill) {
+					player.removeSkillBlocker(skill);
+				},
+				skillBlocker(skill, player) {
+					return skill != "diy_zhenhun_blocker" && !lib.skill[skill].charlotte && !lib.skill[skill].locked && !lib.skill[skill].persevereSkill;
+				},
+			},
+		},
+	},
 	//派对浪客
 	nsxingyun: {
 		audio: 1,

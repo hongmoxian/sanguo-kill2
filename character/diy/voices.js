@@ -1,6 +1,11 @@
 const voices = {
-	"#diy_wansha1": "三更既到，谁敢留你到五更！",
-	"#diy_wansha2": "生死已定，莫妄求生。",
+	// 完杀沿用原贾诩台词
+	"#diy_wansha1": "神仙难救，神仙难救啊。",
+	"#diy_wansha2": "我要你三更死，谁敢留你到五更！",
+	"#diy_shayi1": "杀意既决，便无退路！",
+	"#diy_shayi2": "此杀，避无可避！",
+	"#diy_zhenhun1": "震魂摄魄，万念俱寂！",
+	"#diy_zhenhun2": "诸技皆止，任我宰割！",
 	// DIY张春华 - 三国KILL 4.6 原包语音
 	"#diy_zch_jueqing_v13_1": "你的死活，与我何干。",
 	"#diy_zch_shangshi_v13_1": "无情者伤人，有情者自伤。",

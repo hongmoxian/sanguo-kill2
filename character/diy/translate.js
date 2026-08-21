@@ -1,6 +1,10 @@
 const translates = {
 	diy_wansha: "完杀",
 	diy_wansha_info: "锁定技，除你之外，其他角色不能使用【桃】救援濒死角色；濒死角色可以使用【桃】自救。",
+	diy_shayi: "杀意",
+	diy_shayi_info: "锁定技，出牌阶段开始时，你展示所有手牌，若有【杀】，你摸一张牌；若没有【杀】，你于本阶段可以将黑色牌当【杀】使用。你使用【杀】无距离限制、无次数限制。",
+	diy_zhenhun: "震魂",
+	diy_zhenhun_info: "出牌阶段限一次，你可以弃置一张牌，然后令所有其他角色的非锁定技于本阶段内无效。",
 	diy_liufu: "刘馥",
 	diy_xizhenxihong: "习珍习宏",
 	diy_liuzan: "留赞",
