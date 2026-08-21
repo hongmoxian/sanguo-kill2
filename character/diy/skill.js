@@ -30,22 +30,26 @@ const skills = {
 	diy_shayi: {
 		locked: true,
 		audio: ["shencai1.mp3", "shencai2.mp3"],
-		mod: {
-			targetInRange(card, player) {
-				if (player.hasSkill("diy_shayi_effect") && get.name(card) == "sha") return true;
-			},
-			cardUsable(card, player) {
-				if (player.hasSkill("diy_shayi_effect") && get.name(card) == "sha") return Infinity;
-			},
-		},
 		trigger: { player: "phaseUseBegin" },
 		forced: true,
 		async content(event, trigger, player) {
 			await player.showHandcards();
+			player.addTempSkill("diy_shayi_limit", "phaseUseEnd");
 			if (player.hasCard(card => get.name(card) == "sha", "h")) player.draw();
 			else player.addTempSkill("diy_shayi_effect", "phaseUseEnd");
 		},
 		subSkill: {
+			limit: {
+				charlotte: true,
+				mod: {
+					targetInRange(card) {
+						if (get.name(card) == "sha") return true;
+					},
+					cardUsable(card, player) {
+						if (get.name(card) == "sha") return Infinity;
+					},
+				},
+			},
 			effect: {
 				audio: false,
 				enable: "chooseToUse",
