@@ -61,7 +61,6 @@ const skills = {
 			effect: {
 				audio: false,
 				enable: "chooseToUse",
-				content() {},
 				filter(event, player) {
 					return player.hasCard(card => get.color(card) == "black", "h") && event.filterCard({ name: "sha" }, player, event);
 				},
@@ -92,33 +91,7 @@ const skills = {
 		},
 		async content(event, trigger, player) {
 			await player.chooseToDiscard("he", true);
-			game.filterPlayer(target => target != player).forEach(target => target.addTempSkill("diy_zhenhun_blocker", "phaseUseEnd"));
-			player.addTempSkill("diy_zhenhun_refresh", "phaseUseEnd");
-		},
-	},
-	diy_zhenhun_refresh: {
-		charlotte: true,
-		trigger: { global: "dieAfter" },
-		forced: true,
-		filter(event, player) {
-			return event.player != player && event.player.side != player.side;
-		},
-		content(event, trigger, player) {
-			var stat = player.getStat("skill");
-			if (stat) stat.diy_zhenhun = 0;
-		},
-	},
-	diy_zhenhun_blocker: {
-		charlotte: true,
-		content() {},
-		init(player, skill) {
-			player.addSkillBlocker(skill);
-		},
-		onremove(player, skill) {
-			player.removeSkillBlocker(skill);
-		},
-		skillBlocker(skill, player) {
-			return skill != "diy_zhenhun_blocker" && lib.skill[skill] && !lib.skill[skill].charlotte && !lib.skill[skill].locked && !lib.skill[skill].persevereSkill;
+			game.filterPlayer(target => target != player).forEach(target => target.addTempSkill("fengyin", { global: "phaseUseEnd" }));
 		},
 	},
 	diy_luoying: {

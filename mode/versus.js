@@ -1764,6 +1764,12 @@ export default () => {
 						return;
 					} else {
 						game.clearEndlessSave();
+						event.saved = null;
+						event.restore = false;
+						delete _status.endlessRestore;
+						_status.endlessShaBonus = 0;
+						_status.endlessCompleted = 0;
+						_status.endlessPoints = 0;
 						event.goto(2);
 					}
 					"step 2";
@@ -7990,6 +7996,10 @@ export default () => {
 							if (this.side == me.side) {
 								game.replaceEndlessPlayer(this);
 								return;
+							}
+							if (me.hasSkill("diy_zhenhun")) {
+								var skillStat = me.getStat("skill");
+								if (skillStat) skillStat.diy_zhenhun = 0;
 							}
 							var enemiesAlive = game.players.some(function (current) {
 								return current.side != me.side && current.isIn();
