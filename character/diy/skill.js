@@ -2,6 +2,31 @@ import { lib, game, ui, get, ai, _status } from "../../noname.js";
 
 /** @type { importCharacterConfig['skill'] } */
 const skills = {
+	// DIY版完杀：不受当前回合限制，除濒死者本人外其他角色不能使用桃救援。
+	diy_wansha: {
+		locked: true,
+		audio: 2,
+		global: "diy_wansha2",
+		trigger: { global: "dying" },
+		priority: 15,
+		forced: true,
+		filter(event, player) {
+			return event.player != player;
+		},
+		content() {},
+	},
+	diy_wansha2: {
+		mod: {
+			cardSavable(card, player) {
+				if (card.name != "tao") return;
+				if (!player.isDying() && game.hasPlayer(current => current.hasSkill("diy_wansha") && current != player)) return false;
+			},
+			cardEnabled(card, player) {
+				if (card.name != "tao") return;
+				if (!player.isDying() && game.hasPlayer(current => current.hasSkill("diy_wansha") && current != player)) return false;
+			},
+		},
+	},
 	//派对浪客
 	nsxingyun: {
 		audio: 1,

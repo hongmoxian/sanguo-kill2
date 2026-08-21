@@ -1,4 +1,6 @@
 const translates = {
+	diy_wansha: "完杀",
+	diy_wansha_info: "锁定技，除你之外，其他角色不能使用【桃】救援濒死角色；濒死角色可以使用【桃】自救。",
 	diy_liufu: "刘馥",
 	diy_xizhenxihong: "习珍习宏",
 	diy_liuzan: "留赞",

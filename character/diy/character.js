@@ -95,7 +95,7 @@ const characters = {
 	junk_guanyu: ["male", "shu", 4, ["olsbfumeng", "olsbguidao"]],
 	junk_liuyan: ["male", "qun", "4/6", ["olpianan", "olyinji", "olkuisi"]],
 
-	diy_zhangchunhua: ["female", "wei", 8, ["diy_zch_jueqing", "diy_zch_shangshi", "diy_zch_zhiming", "diy_zch_suyin", "diy_zch_biantian", "diy_zch_tianqi", "diy_zch_shendao", "diy_zch_yinshi", "oldzhuikong", "luoying", "guzheng", "wansha", "guose", "diy_autoskip_phase"]],
+	diy_zhangchunhua: ["female", "wei", 8, ["diy_zch_jueqing", "diy_zch_shangshi", "diy_zch_zhiming", "diy_zch_suyin", "diy_zch_biantian", "diy_zch_tianqi", "diy_zch_shendao", "diy_zch_yinshi", "oldzhuikong", "luoying", "guzheng", "diy_wansha", "shencai", "xunshi", "guose", "diy_autoskip_phase"]],
 	// 三英战吕布 - 神吕布（最强神话形态，8勾玉）
 	shen_lvbu_sanying: ["male", "qun", 8, ["mashu", "wushuang", "sanying_shenji1"]],
 };

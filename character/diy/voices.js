@@ -1,4 +1,6 @@
 const voices = {
+	"#diy_wansha1": "三更既到，谁敢留你到五更！",
+	"#diy_wansha2": "生死已定，莫妄求生。",
 	// DIY张春华 - 三国KILL 4.6 原包语音
 	"#diy_zch_jueqing_v13_1": "你的死活，与我何干。",
 	"#diy_zch_shangshi_v13_1": "无情者伤人，有情者自伤。",
