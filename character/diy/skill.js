@@ -98,7 +98,7 @@ const skills = {
 	},
 	diy_zhenhun_refresh: {
 		charlotte: true,
-		trigger: { global: "die" },
+		trigger: { global: "dieAfter" },
 		forced: true,
 		filter(event, player) {
 			return event.player != player && event.player.side != player.side;
