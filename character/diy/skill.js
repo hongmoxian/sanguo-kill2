@@ -61,6 +61,7 @@ const skills = {
 			effect: {
 				audio: false,
 				enable: "chooseToUse",
+				content() {},
 				filter(event, player) {
 					return player.hasCard(card => get.color(card) == "black", "h") && event.filterCard({ name: "sha" }, player, event);
 				},
@@ -114,19 +115,19 @@ const skills = {
 					player.unmarkAuto("diy_zhenhun_used", [true]);
 				},
 			},
-			blocker: {
-				charlotte: true,
-				content() {},
-				init(player, skill) {
-					player.addSkillBlocker(skill);
-				},
-				onremove(player, skill) {
-					player.removeSkillBlocker(skill);
-				},
-				skillBlocker(skill, player) {
-					return skill != "diy_zhenhun_blocker" && !lib.skill[skill].charlotte && !lib.skill[skill].locked && !lib.skill[skill].persevereSkill;
-				},
-			},
+		},
+	},
+	diy_zhenhun_blocker: {
+		charlotte: true,
+		content() {},
+		init(player, skill) {
+			player.addSkillBlocker(skill);
+		},
+		onremove(player, skill) {
+			player.removeSkillBlocker(skill);
+		},
+		skillBlocker(skill, player) {
+			return skill != "diy_zhenhun_blocker" && lib.skill[skill] && !lib.skill[skill].charlotte && !lib.skill[skill].locked && !lib.skill[skill].persevereSkill;
 		},
 	},
 	diy_luoying: {
