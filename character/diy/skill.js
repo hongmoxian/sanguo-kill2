@@ -7894,6 +7894,9 @@ const skills = {
 		trigger: { source: "damageBefore" },
 		forced: true,
 		content: function () {
+			if (trigger.card && get.name(trigger.card) == "sha" && trigger.source && trigger.source.hasSkill("diy_shayi_limit")) {
+				trigger.num++;
+			}
 			trigger.cancel();
 			trigger.player.loseHp(trigger.num);
 		},
