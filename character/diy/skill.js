@@ -5,7 +5,7 @@ const skills = {
 	// DIY版完杀：不受当前回合限制，除濒死者本人外其他角色不能使用桃救援。
 	diy_wansha: {
 		locked: true,
-		audio: 2,
+		audio: ["wansha1.mp3", "wansha2.mp3"],
 		global: "diy_wansha2",
 		trigger: { global: "dying" },
 		priority: 15,
@@ -29,7 +29,15 @@ const skills = {
 	},
 	diy_shayi: {
 		locked: true,
-		audio: 2,
+		audio: ["shencai1.mp3", "shencai2.mp3"],
+		mod: {
+			targetInRange(card, player) {
+				if (player.hasSkill("diy_shayi_effect") && get.name(card) == "sha") return true;
+			},
+			cardUsable(card, player) {
+				if (player.hasSkill("diy_shayi_effect") && get.name(card) == "sha") return Infinity;
+			},
+		},
 		trigger: { player: "phaseUseBegin" },
 		forced: true,
 		async content(event, trigger, player) {
@@ -63,7 +71,7 @@ const skills = {
 		},
 	},
 	diy_zhenhun: {
-		audio: 2,
+		audio: ["xunshi1.mp3", "xunshi2.mp3"],
 		enable: "phaseUse",
 		usable: 1,
 		filter(event, player) {
