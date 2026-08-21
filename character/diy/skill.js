@@ -36,11 +36,19 @@ const skills = {
 			await player.showHandcards();
 			player.addTempSkill("diy_shayi_limit", "phaseUseEnd");
 			if (player.hasCard(card => get.name(card) == "sha", "h")) player.draw();
-			else player.addTempSkill("diy_shayi_effect", "phaseUseEnd");
+			player.addTempSkill("diy_shayi_effect", "phaseUseEnd");
 		},
 		subSkill: {
 			limit: {
 				charlotte: true,
+				trigger: { source: "damageBegin1" },
+				forced: true,
+				filter(event) {
+					return event.card && get.name(event.card) == "sha";
+				},
+				content(event, trigger) {
+					trigger.num++;
+				},
 				mod: {
 					targetInRange(card) {
 						if (get.name(card) == "sha") return true;
