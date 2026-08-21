@@ -1847,9 +1847,14 @@ game.import("card", function () {
 					let pos = get.is.single() ? "he" : "hej";
 					if (target.countGainableCards(player, pos)) {
 						let next = player.gainPlayerCard(pos, target, true).set("target", target).set("complexSelect", false).set("ai", lib.card.shunshou.ai.button);
-						// If only hand cards are available, show them so the player can choose.
+						// If only hand cards are available, allow choosing a hidden hand-card button.
 						let field = get.is.single() ? "e" : "ej";
-						if (!target.countGainableCards(player, field)) next.set("visible", true);
+						if (!target.countGainableCards(player, field)) {
+							next.set("complexSelect", true);
+							next.set("filterButton", function () {
+								return true;
+							});
+						}
 					}
 				},
 				ai: {
@@ -2119,7 +2124,10 @@ game.import("card", function () {
 					"step 1";
 					let pos,
 						vis = "visible";
-					if (result.control == "手牌区") pos = "h";
+					if (result.control == "手牌区") {
+						pos = "h";
+						if (!target.countDiscardableCards(player, "e")) vis = undefined;
+					}
 					else if (result.control == "装备区") pos = "e";
 					else {
 						pos = "hej";
@@ -2127,8 +2135,13 @@ game.import("card", function () {
 					}
 					if (target.countDiscardableCards(player, pos)) {
 						let next = player.discardPlayerCard(pos, target, true, vis).set("target", target).set("complexSelect", false).set("ai", lib.card.guohe.ai.button);
-						// If only hand cards are available, show them so the player can choose.
-						if (!vis && !target.countDiscardableCards(player, "ej")) next.set("visible", true);
+						// If only hand cards are available, allow choosing a hidden hand-card button.
+						if (!target.countDiscardableCards(player, "ej")) {
+							next.set("complexSelect", true);
+							next.set("filterButton", function () {
+								return true;
+							});
+						}
 					}
 				},
 				ai: {
