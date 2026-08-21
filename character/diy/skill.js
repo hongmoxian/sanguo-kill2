@@ -85,15 +85,35 @@ const skills = {
 	diy_zhenhun: {
 		audio: ["xunshi1.mp3", "xunshi2.mp3"],
 		enable: "phaseUse",
-		usable: 1,
+		group: ["diy_zhenhun_clear", "diy_zhenhun_refresh"],
 		filter(event, player) {
-			return player.countCards("he") > 0;
+			return !player.getStorage("diy_zhenhun_used").length && player.countCards("he") > 0;
 		},
 		async content(event, trigger, player) {
+			player.markAuto("diy_zhenhun_used", [true]);
 			await player.chooseToDiscard("he", true);
 			game.filterPlayer(target => target != player).forEach(target => target.addTempSkill("diy_zhenhun_blocker", "phaseUseEnd"));
 		},
 		subSkill: {
+			clear: {
+				trigger: { player: "phaseUseBegin" },
+				forced: true,
+				charlotte: true,
+				content(event, trigger, player) {
+					player.unmarkAuto("diy_zhenhun_used", [true]);
+				},
+			},
+			refresh: {
+				trigger: { global: "die" },
+				forced: true,
+				charlotte: true,
+				filter(event, player) {
+					return event.player != player && event.player.side != player.side && player.hasSkill("diy_zhenhun");
+				},
+				content(event, trigger, player) {
+					player.unmarkAuto("diy_zhenhun_used", [true]);
+				},
+			},
 			blocker: {
 				charlotte: true,
 				init(player, skill) {
