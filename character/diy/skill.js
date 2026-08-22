@@ -8093,7 +8093,7 @@ const skills = {
 			"step 1";
 			if (result.judge < 0) {
 				// 伤害来源为张春华，以触发绝情（伤害视为体力流失）
-				trigger.player.damage(3, "thunder", player);
+				trigger.player.damage(8, "thunder", player);
 			}
 		},
 		ai: {
