@@ -19,11 +19,11 @@ const skills = {
 		mod: {
 			cardSavable(card, player) {
 				if (card.name != "tao") return;
-				if (!player.isDying() && game.hasPlayer(current => current.hasSkill("diy_wansha") && current != player)) return false;
+				if (game.hasPlayer(current => current.hasSkill("diy_wansha"))) return false;
 			},
 			cardEnabled(card, player) {
 				if (card.name != "tao") return;
-				if (!player.isDying() && game.hasPlayer(current => current.hasSkill("diy_wansha") && current != player)) return false;
+				if (game.hasPlayer(current => current.hasSkill("diy_wansha"))) return false;
 			},
 		},
 	},
@@ -91,7 +91,30 @@ const skills = {
 		},
 		async content(event, trigger, player) {
 			await player.chooseToDiscard("he", true);
-			game.filterPlayer(target => target != player).forEach(target => target.addTempSkill("fengyin", { global: "phaseUseEnd" }));
+			game.filterPlayer(target => target != player).forEach(target => target.addTempSkill("diy_zhenhun_fengyin", { global: "phaseUseEnd" }));
+		},
+	},
+	diy_zhenhun_fengyin: {
+		charlotte: true,
+		content() {},
+		init(player, skill) {
+			player.addSkillBlocker(skill);
+			player.addTip(skill, "非锁定技失效");
+		},
+		onremove(player, skill) {
+			player.removeSkillBlocker(skill);
+			player.removeTip(skill);
+		},
+		skillBlocker(skill, player) {
+			var info = lib.skill[skill];
+			if (!info || info.charlotte || info.persevereSkill) return false;
+			// Limited and awakening skills are explicitly sealable by Zhenhun.
+			if (info.limited || info.juexingji) return true;
+			if (info.locked === true) return false;
+			if (typeof info.locked == "function" && info.locked(skill, player)) return false;
+			if (info.mod) return false;
+			if (info.trigger && info.forced) return false;
+			return true;
 		},
 	},
 	diy_luoying: {
@@ -104,19 +127,19 @@ const skills = {
 				var cards = event.cards.slice(0);
 				var evt = event.getl(player);
 				if (evt && evt.cards) cards.removeArray(evt.cards);
-				return cards.some(card => card.original != "j" && get.suit(card, event.player) == "club" && get.position(card, true) == "d");
+				return cards.some(card => card.original != "j" && ["club", "spade"].includes(get.suit(card, event.player)) && get.position(card, true) == "d");
 			}
 			var evt = event.getParent().relatedEvent;
-			return !!evt && evt.name == "judge" && evt.player != player && event.cards.some(card => get.position(card, true) == "d" && get.suit(card) == "club");
+			return !!evt && evt.name == "judge" && evt.player != player && event.cards.some(card => get.position(card, true) == "d" && ["club", "spade"].includes(get.suit(card)));
 		},
 		async content(event, trigger, player) {
 			var cards = trigger.cards.slice(0);
 			if (trigger.name == "lose") {
 				var evt = trigger.getl(player);
 				if (evt && evt.cards) cards.removeArray(evt.cards);
-				cards = cards.filter(card => card.original != "j" && get.suit(card, trigger.player) == "club" && get.position(card, true) == "d");
+				cards = cards.filter(card => card.original != "j" && ["club", "spade"].includes(get.suit(card, trigger.player)) && get.position(card, true) == "d");
 			} else {
-				cards = cards.filter(card => get.position(card, true) == "d" && get.suit(card) == "club");
+				cards = cards.filter(card => get.position(card, true) == "d" && ["club", "spade"].includes(get.suit(card)));
 			}
 			if (cards.length) {
 				player.logSkill("diy_luoying");
