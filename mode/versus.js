@@ -336,19 +336,15 @@ export default () => {
 			} else if (_status.mode == "endless") {
 				// The selection event needs a local player and stable ids before its dialog is created.
 				game.me = game.players[0];
+				_status.auto = false;
+				game.notMe = false;
+				if (ui.auto) ui.auto.classList.remove("glow");
+				if (ui.autonode) ui.autonode.hide();
+				_status.endlessCharacterChosen = false;
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
-				if (!_status.endlessCharacterChosen) {
-					if (!event.endlessSelectionPending) {
-						event.endlessSelectionPending = true;
-						game.chooseCharacterEndless();
-					}
-					// Never proceed to video initialization/dealing until the child
-					// selection event has actually initialized the local hero.
-					event.goto(2);
-					return;
-				}
+				game.chooseCharacterEndless(event);
 			} else if (_status.mode == "siguo") {
 				var list = ["wei", "wei", "shu", "shu", "wu", "wu", "qun", "qun"].randomSort();
 				for (var i = 0; i < game.players.length; i++) {
@@ -1783,8 +1779,8 @@ export default () => {
 					}
 				});
 			},
-			chooseCharacterEndless: function () {
-				var next = game.createEvent("chooseCharacter");
+			chooseCharacterEndless: function (parent) {
+				var next = game.createEvent("chooseCharacter", true, parent);
 				next.showConfig = true;
 				next.setContent(function () {
 					"step 0";
@@ -1941,6 +1937,7 @@ export default () => {
 						ui.arena.classList.remove("choose-character");
 					}, 500);
 				});
+				return next;
 			},
 			chooseCharacterFour: function () {
 				var next = game.createEvent("chooseCharacter");
