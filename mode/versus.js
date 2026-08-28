@@ -334,18 +334,13 @@ export default () => {
 				}
 				game.chooseCharacterTwo();
 			} else if (_status.mode == "endless") {
-				// The selection event needs a local player and stable ids before its dialog is created.
+				// Keep the Endless picker on the normal event queue.  The picker itself
+				// establishes game.me before opening its controls.
 				game.me = game.players[0];
-				_status.auto = false;
-				game.notMe = false;
-				if (ui.auto) ui.auto.classList.remove("glow");
-				if (ui.autonode) ui.autonode.hide();
-				_status.endlessCharacterChosen = false;
-				if (game.me.skipList) game.me.skipList.remove("chooseCharacter");
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
-				game.chooseCharacterEndless(event);
+				game.chooseCharacterEndless();
 			} else if (_status.mode == "siguo") {
 				var list = ["wei", "wei", "shu", "shu", "wu", "wu", "qun", "qun"].randomSort();
 				for (var i = 0; i < game.players.length; i++) {
@@ -394,6 +389,12 @@ export default () => {
 				game.chooseCharacter();
 			}
 			"step 3";
+			// Never enter battle setup with an uninitialised Endless hero. This avoids
+			// creating an enemy-only table when a stale event queue is encountered.
+			if (_status.mode == "endless" && (!_status.endlessCharacterChosen || !game.me || !game.me.name1)) {
+				event.finish();
+				return;
+			}
 			var players = get.players(lib.sort.position);
 			var info = [];
 			for (var i = 0; i < players.length; i++) {
@@ -473,7 +474,6 @@ export default () => {
 					_status.endlessBest = lib.config.versus_endless_level || 0;
 					_status.endlessShaBonus = endlessSave ? endlessSave.shaBonus : 0;
 					game.addGlobalSkill("endless_sha_bonus");
-					game.endlessPrepareEnemies(false);
 					game.updateEndlessStatus();
 					var firstChoose = game.players[1];
 					game.gameDraw(firstChoose);
@@ -1780,8 +1780,15 @@ export default () => {
 					}
 				});
 			},
-			chooseCharacterEndless: function (parent) {
-				var next = game.createEvent("chooseCharacter", undefined, parent);
+			chooseCharacterEndless: function () {
+				// createEvent() normally uses eventManager.tempEvent first. That value can
+				// survive a mode restart and leave this picker attached to an old battle.
+				// Bind it to the currently executing event instead.
+				var manager = _status.eventManager;
+				var parent = manager && manager.eventStack && manager.eventStack.length
+					? manager.eventStack[manager.eventStack.length - 1]
+					: undefined;
+				var next = game.createEvent("chooseCharacter", true, parent);
 				next.showConfig = true;
 				next.setContent(function () {
 					"step 0";
@@ -1939,6 +1946,7 @@ export default () => {
 						ui.arena.classList.remove("choose-character");
 					}, 500);
 				});
+				return next;
 			},
 			chooseCharacterFour: function () {
 				var next = game.createEvent("chooseCharacter");

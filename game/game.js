@@ -158,7 +158,7 @@
 		}).catch(error => console.warn("清理本地 Service Worker 失败，继续直接加载源码", error));
 	} else if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
 		let scope = new URL("./", location.href).toString();
-		const serviceWorkerURL = `${scope}service-worker.js?v=20260828-endless37`;
+		const serviceWorkerURL = `${scope}service-worker.js?v=20260828-endless39`;
 		let registrations = await navigator.serviceWorker.getRegistrations();
 		let findServiceWorker = registrations.find(registration => {
 			if (!registration || !registration.active) return false;
@@ -208,7 +208,7 @@
 	// 设置该 <script> 元素为模块脚本
 	script.type = "module";
 	// 设置 <script> 元素的 src 属性,指向 entry.js 文件
-		script.src = `${assetURL}game/entry.js?v=20260828-endless37`;
+		script.src = `${assetURL}game/entry.js?v=20260828-endless39`;
 	// 设置该脚本为异步加载
 	script.async = true;
 	// 为 <script> 元素设置 onerror 事件处理程序

@@ -368,7 +368,7 @@
 		// Clear workers and Cache Storage left by an older local build before booting.
 		// The session marker prevents a reload loop after the cleanup completes.
 		(async function clearStaleLocalBuild() {
-			const build = "20260828-endless37";
+			const build = "20260828-endless39";
 			const marker = "noname-local-build-cleaned-" + build;
 			if (!window.isSecureContext && location.protocol !== "http:" && location.protocol !== "https:") return;
 			// game/game.js performs an awaited cleanup for localhost before loading
@@ -393,8 +393,8 @@
 			}
 		})();
 	</script>
-	<script src="game/update.js?v=20260828-endless37"></script>
-	<script src="game/config.js?v=20260828-endless37"></script>
-	<script src="game/package.js?v=20260828-endless37"></script>
-	<script src="game/game.js?v=20260828-endless37"></script>
+	<script src="game/update.js?v=20260828-endless39"></script>
+	<script src="game/config.js?v=20260828-endless39"></script>
+	<script src="game/package.js?v=20260828-endless39"></script>
+	<script src="game/game.js?v=20260828-endless39"></script>
 </head>
