@@ -332,7 +332,15 @@ export default () => {
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
-				game.chooseCharacterEndless();
+				if (!_status.endlessCharacterChosen) {
+					_status.endlessCharacterChosen = false;
+					if (!event.endlessSelectionPending) {
+						event.endlessSelectionPending = true;
+						game.chooseCharacterEndless();
+						event.goto(2);
+						return;
+					}
+				}
 			} else if (_status.mode == "siguo") {
 				var list = ["wei", "wei", "shu", "shu", "wu", "wu", "qun", "qun"].randomSort();
 				for (var i = 0; i < game.players.length; i++) {
@@ -1920,6 +1928,7 @@ export default () => {
 					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
 					_status.firstAct = game.players[1];
+					_status.endlessCharacterChosen = true;
 					setTimeout(function () {
 						ui.arena.classList.remove("choose-character");
 					}, 500);
