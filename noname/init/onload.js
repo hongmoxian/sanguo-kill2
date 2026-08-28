@@ -210,7 +210,7 @@ export async function onload() {
 	// Reapply the built-in implementation after every extension has loaded so
 	// the battle always starts from the current full-character selection flow.
 	if (lib.config.mode === "endless") {
-		const endlessModule = await import("../../mode/endless.js?v=20260828-endless22");
+		const endlessModule = await import("../../mode/endless.js?v=20260828-endless23");
 		const endlessMode = endlessModule.default();
 		reapplyMode(endlessMode);
 		lib.init.start = endlessMode.start;

@@ -465,6 +465,7 @@ export default () => {
 					_status.endlessBest = lib.config.versus_endless_level || 0;
 					_status.endlessShaBonus = endlessSave ? endlessSave.shaBonus : 0;
 					game.addGlobalSkill("endless_sha_bonus");
+					game.endlessPrepareEnemies(false);
 					game.updateEndlessStatus();
 					var firstChoose = game.players[1];
 					game.gameDraw(firstChoose);
@@ -1877,7 +1878,7 @@ export default () => {
 						}
 					}
 					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
-					game.me.chooseButton(dialog, false).set("onfree", true);
+					game.me.chooseButton(dialog, true).set("onfree", true);
 					"step 4";
 					if (!result || !result.bool || !result.links || !result.links[0]) {
 						event.goto(3);
