@@ -689,7 +689,17 @@ export default () => {
 				else ui.endlessLevel.innerHTML = label;
 			},
 			getEndlessCharacter: function () {
-				var list = _status.endlessList || [];
+				var list = (_status.endlessList || []).filter(function (name, index, pool) {
+					return typeof name == "string" && pool.indexOf(name) == index;
+				});
+				_status.endlessList = list;
+				if (list.length < 3) {
+					var savedPool = (_status.endlessListAll || []).filter(function (name, index, pool) {
+						return typeof name == "string" && pool.indexOf(name) == index;
+					});
+					if (savedPool.length >= 3) list = savedPool;
+				}
+				_status.endlessList = list;
 				if (!list.length) {
 					list = (_status.endlessListAll || []).slice(0);
 					if (!list.length) {
@@ -1762,6 +1772,7 @@ export default () => {
 				next.showConfig = true;
 				next.setContent(function () {
 					"step 0";
+					game.me = game.players[0];
 					_status.auto = false;
 					game.notMe = false;
 					ui.arena.classList.add("choose-character");
