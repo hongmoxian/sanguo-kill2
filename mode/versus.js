@@ -386,11 +386,6 @@ export default () => {
 				game.chooseCharacter();
 			}
 			"step 3";
-			if (_status.mode == "endless" && !_status.endlessCharacterChosen) {
-				// Never start a stage from an incomplete character-selection event.
-				game.chooseCharacterEndless();
-				return;
-			}
 			var players = get.players(lib.sort.position);
 			var info = [];
 			for (var i = 0; i < players.length; i++) {
