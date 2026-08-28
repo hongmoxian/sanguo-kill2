@@ -324,6 +324,12 @@ export async function boot() {
 	}
 
 	if (!config.get("gameRecord")) config.set("gameRecord", {});
+	// Endless is a built-in mode and must remain visible even if an older
+	// profile accidentally persisted it in hiddenModePack.
+	if (config.get("hiddenModePack").includes("endless")) {
+		config.get("hiddenModePack").remove("endless");
+		game.saveConfig("hiddenModePack", config.get("hiddenModePack"));
+	}
 	for (const name in pack.mode) {
 		if (config.get("hiddenModePack").indexOf(name) == -1) {
 			config.get("all").mode.push(name);
