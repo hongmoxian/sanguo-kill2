@@ -460,7 +460,6 @@ export default () => {
 					_status.endlessBest = lib.config.versus_endless_level || 0;
 					_status.endlessShaBonus = endlessSave ? endlessSave.shaBonus : 0;
 					game.addGlobalSkill("endless_sha_bonus");
-					game.endlessPrepareEnemies(false);
 					game.updateEndlessStatus();
 					var firstChoose = game.players[1];
 					game.gameDraw(firstChoose);
@@ -1805,6 +1804,17 @@ export default () => {
 						event.list = (event.saved.list || []).filter(function (name) {
 							return !!lib.character[name] && !event.selected.includes(name);
 						}).slice(0);
+						// Older saves may have written an empty/random pool after the
+						// enemy seats were initialized twice. Rebuild it instead of
+						// falling back to the same character for every seat.
+						if (event.list.length < 3) {
+							event.list = [];
+							for (var restoreName in lib.character) {
+								if (!event.selected.includes(restoreName) && !["zumo", "zhangchunhua", "star_shenzhaoyun", "sr_simayi"].includes(restoreName)) {
+									event.list.push(restoreName);
+								}
+							}
+						}
 						_status.endlessListAll = event.list.slice(0);
 						event.goto(5);
 						return;
@@ -1870,9 +1880,6 @@ export default () => {
 						game.players[0].hp = event.saved.player.hp;
 						game.players[0].hujia = event.saved.player.hujia || 0;
 						game.players[0].update();
-					}
-					for (var i = 1; i < game.players.length; i++) {
-						game.endlessInitCharacter(game.players[i], game.getEndlessCharacter() || "re_guojia", false);
 					}
 					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
