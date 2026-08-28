@@ -6271,7 +6271,7 @@ export class Game extends GameCompatible {
 	loadModeAsync(name, callback, onerror = e => console.error(e)) {
 		let promise = (async () => {
 			window.game = game;
-			const exports = await import(`../../mode/${name}.js?v=20260828-endless33`);
+			const exports = await import(`../../mode/${name}.js?v=20260828-endless34`);
 			// esm模式
 			if (Object.keys(exports).length > 0) {
 				if (typeof exports.default !== "function") {

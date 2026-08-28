@@ -1782,6 +1782,7 @@ export default () => {
 			chooseCharacterEndless: function () {
 				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;
+				next.player = game.me;
 				next.setContent(function () {
 					"step 0";
 					game.me = game.players[0];
@@ -1793,6 +1794,7 @@ export default () => {
 					if (game.me.skipList) {
 						game.me.skipList.remove("chooseControl");
 						game.me.skipList.remove("chooseButton");
+						game.me.skipList.remove("chooseCharacter");
 					}
 					ui.arena.classList.add("choose-character");
 					var saved = game.getEndlessSave();
@@ -1910,10 +1912,6 @@ export default () => {
 					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
 					game.me.chooseButton(dialog, true).set("onfree", true);
 					"step 4";
-					if (!result || !result.bool || !result.links || !result.links[0]) {
-						event.goto(3);
-						return;
-					}
 					event.selected.push(result.links[0]);
 					event.list.remove(result.links[0]);
 					if (event.selected.length < 3) {

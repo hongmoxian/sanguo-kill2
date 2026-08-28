@@ -25,7 +25,7 @@ if (typeof sfc != 'undefined') {
 	console.error(`sfc undefined`);
 }
 
-console.log('serviceWorker version 2.4-endless33');
+console.log('serviceWorker version 2.4-endless34');
 
 self.addEventListener("install", (event) => {
 	// The promise that skipWaiting() returns can be safely ignored.
