@@ -1742,7 +1742,6 @@ export default () => {
 			chooseCharacterEndless: function () {
 				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;
-				next.player = game.me;
 				next.setContent(function () {
 					"step 0";
 					ui.arena.classList.add("choose-character");
@@ -1900,7 +1899,6 @@ export default () => {
 						game.players[0].hujia = event.saved.player.hujia || 0;
 						game.players[0].update();
 					}
-					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
 					_status.firstAct = game.players[1];
 					_status.endlessCharacterChosen = true;
