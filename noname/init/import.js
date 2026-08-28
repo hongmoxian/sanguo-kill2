@@ -58,7 +58,7 @@ function generateImportFunction(type, pathParser) {
 		// Mode and pack modules are ES modules, so a normal reload can retain an
 		// already evaluated module in the browser module map. Keep the local build
 		// revision on the request to ensure updated gameplay code is evaluated.
-	const cacheVersion = "20260828-endless31";
+	const cacheVersion = "20260828-endless32";
 		const [status, script] = await new Promise(resolve => {
 			const createScript = () => {
 				const script = document.createElement("script");
