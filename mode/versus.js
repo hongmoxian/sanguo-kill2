@@ -1783,7 +1783,6 @@ export default () => {
 			chooseCharacterEndless: function () {
 				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;
-				next.player = game.me;
 				next.setContent(function () {
 					"step 0";
 					game.me = game.players[0];
