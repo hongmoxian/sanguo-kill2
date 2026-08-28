@@ -708,8 +708,22 @@ export default () => {
 			getEndlessSave: function () {
 				try {
 					var save = JSON.parse(localStorage.getItem(lib.configprefix + "endless_save"));
-					if (save && save.version == 1 && save.player && typeof save.player.name == "string") return save;
+					if (!save || save.version != 1 || !save.player || typeof save.player.name != "string") {
+						this.clearEndlessSave();
+						return null;
+					}
+					var list = Array.isArray(save.list) ? save.list.filter(name => typeof name == "string") : [];
+					var unique = list.filter((name, index) => list.indexOf(name) == index);
+					if (unique.length < 3) {
+						// The old save format could persist an exhausted or duplicated
+						// enemy pool. It cannot restore a valid 1v3 stage, so start fresh.
+						this.clearEndlessSave();
+						return null;
+					}
+					save.list = unique;
+					return save;
 				} catch (e) {}
+				this.clearEndlessSave();
 				return null;
 			},
 			clearEndlessSave: function () {
