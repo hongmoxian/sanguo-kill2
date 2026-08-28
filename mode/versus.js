@@ -692,9 +692,18 @@ export default () => {
 				var list = _status.endlessList || [];
 				if (!list.length) {
 					list = (_status.endlessListAll || []).slice(0);
+					if (!list.length) {
+						// A legacy save can contain an empty pool. Rebuild it from
+						// the loaded character table so every enemy gets a real,
+						// distinct candidate instead of the same fallback hero.
+						var excluded = ["zumo", "zhangchunhua", "star_shenzhaoyun", "sr_simayi"];
+						list = Object.keys(lib.character).filter(function (name) {
+							return !excluded.includes(name) && lib.character[name];
+						});
+					}
 					_status.endlessList = list;
 				}
-				return list.randomRemove();
+				return list.randomRemove() || "re_guojia";
 			},
 			getEndlessSave: function () {
 				try {
@@ -1739,6 +1748,8 @@ export default () => {
 				next.showConfig = true;
 				next.setContent(function () {
 					"step 0";
+					_status.auto = false;
+					game.notMe = false;
 					ui.arena.classList.add("choose-character");
 					var saved = game.getEndlessSave();
 					if (saved) {
