@@ -344,7 +344,7 @@ export default () => {
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
-				game.chooseCharacterEndless(event);
+				game.chooseCharacterEndless();
 			} else if (_status.mode == "siguo") {
 				var list = ["wei", "wei", "shu", "shu", "wu", "wu", "qun", "qun"].randomSort();
 				for (var i = 0; i < game.players.length; i++) {
@@ -1779,8 +1779,8 @@ export default () => {
 					}
 				});
 			},
-			chooseCharacterEndless: function (parent) {
-				var next = game.createEvent("chooseCharacter", true, parent);
+			chooseCharacterEndless: function () {
+				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;
 				next.setContent(function () {
 					"step 0";
@@ -1910,6 +1910,10 @@ export default () => {
 					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
 					game.me.chooseButton(dialog, true).set("onfree", true);
 					"step 4";
+					if (!result || !result.bool || !result.links || !result.links[0]) {
+						event.goto(3);
+						return;
+					}
 					event.selected.push(result.links[0]);
 					event.list.remove(result.links[0]);
 					if (event.selected.length < 3) {
@@ -1937,7 +1941,6 @@ export default () => {
 						ui.arena.classList.remove("choose-character");
 					}, 500);
 				});
-				return next;
 			},
 			chooseCharacterFour: function () {
 				var next = game.createEvent("chooseCharacter");
