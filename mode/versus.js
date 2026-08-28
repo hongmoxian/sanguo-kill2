@@ -345,7 +345,7 @@ export default () => {
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
-				game.chooseCharacterEndless();
+				game.chooseCharacterEndless(event);
 			} else if (_status.mode == "siguo") {
 				var list = ["wei", "wei", "shu", "shu", "wu", "wu", "qun", "qun"].randomSort();
 				for (var i = 0; i < game.players.length; i++) {
@@ -1780,8 +1780,8 @@ export default () => {
 					}
 				});
 			},
-			chooseCharacterEndless: function () {
-				var next = game.createEvent("chooseCharacter");
+			chooseCharacterEndless: function (parent) {
+				var next = game.createEvent("chooseCharacter", undefined, parent);
 				next.showConfig = true;
 				next.setContent(function () {
 					"step 0";
