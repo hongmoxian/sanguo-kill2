@@ -341,6 +341,7 @@ export default () => {
 				if (ui.auto) ui.auto.classList.remove("glow");
 				if (ui.autonode) ui.autonode.hide();
 				_status.endlessCharacterChosen = false;
+				if (game.me.skipList) game.me.skipList.remove("chooseCharacter");
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
