@@ -61,6 +61,13 @@ export default () => {
 				_status.mode = "endless";
 				lib.config.compatiblemode = true;
 			}
+			// A new Endless launch must always show the save/new-game prompt.  The
+			// status object can survive a mode restart in the same page, so do not let
+			// a previous completed selection bypass the dialog.
+			if (_status.mode == "endless") {
+				_status.endlessCharacterChosen = false;
+				_status.endlessSelectionPending = false;
+			}
 			"step 1";
 			var playback = localStorage.getItem(lib.configprefix + "playback");
 			if (playback) {
@@ -333,13 +340,14 @@ export default () => {
 					game.players[i].getId();
 				}
 				if (!_status.endlessCharacterChosen) {
-					_status.endlessCharacterChosen = false;
 					if (!event.endlessSelectionPending) {
 						event.endlessSelectionPending = true;
 						game.chooseCharacterEndless();
-						event.goto(2);
-						return;
 					}
+					// Never proceed to video initialization/dealing until the child
+					// selection event has actually initialized the local hero.
+					event.goto(2);
+					return;
 				}
 			} else if (_status.mode == "siguo") {
 				var list = ["wei", "wei", "shu", "shu", "wu", "wu", "qun", "qun"].randomSort();

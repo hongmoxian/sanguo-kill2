@@ -141,9 +141,26 @@
 	}
 
 	// 使serviceWorker加载完成后，再加载entry.js
-	if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
+	// Service workers are useful for the packaged/web deployment, but a local
+	// development server must always execute files directly from disk.  A stale
+	// worker can otherwise keep an older mode/versus.js graph alive even after a
+	// hard reload.  Unregister local workers and skip registration entirely.
+	const isLocalHttp = location.protocol === "http:" &&
+		(location.hostname === "localhost" || location.hostname === "127.0.0.1");
+	if (isLocalHttp && "serviceWorker" in navigator) {
+		try {
+			const localRegistrations = await navigator.serviceWorker.getRegistrations();
+			await Promise.all(localRegistrations.map(registration => registration.unregister()));
+			if ("caches" in window) {
+				const localCacheNames = await caches.keys();
+				await Promise.all(localCacheNames.map(cacheName => caches.delete(cacheName)));
+			}
+		} catch (error) {
+			console.warn("清理本地 Service Worker 失败，继续直接加载源码", error);
+		}
+	} else if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
 		let scope = new URL("./", location.href).toString();
-		const serviceWorkerURL = `${scope}service-worker.js?v=20260828-endless31`;
+		const serviceWorkerURL = `${scope}service-worker.js?v=20260828-endless32`;
 		let registrations = await navigator.serviceWorker.getRegistrations();
 		let findServiceWorker = registrations.find(registration => {
 			if (!registration || !registration.active) return false;
