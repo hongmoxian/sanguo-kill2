@@ -331,6 +331,9 @@ export default () => {
 				game.me = game.players[0];
 				_status.auto = false;
 				game.notMe = false;
+				if (ui.auto) ui.auto.classList.remove("glow");
+				if (ui.autonode) ui.autonode.hide();
+				_status.endlessCharacterChosen = false;
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
@@ -383,6 +386,11 @@ export default () => {
 				game.chooseCharacter();
 			}
 			"step 3";
+			if (_status.mode == "endless" && !_status.endlessCharacterChosen) {
+				// Never start a stage from an incomplete character-selection event.
+				game.chooseCharacterEndless();
+				return;
+			}
 			var players = get.players(lib.sort.position);
 			var info = [];
 			for (var i = 0; i < players.length; i++) {
@@ -1838,6 +1846,11 @@ export default () => {
 							list.push(i);
 						}
 					}
+					if (!list.length) {
+						alert("无尽模式没有可用武将，请返回主菜单后重试");
+						event.finish();
+						return;
+					}
 					event.list = list;
 					event.selected = [];
 					_status.endlessListAll = list.slice(0);
@@ -1869,8 +1882,12 @@ export default () => {
 						}
 					}
 					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
-					game.me.chooseButton(dialog, true).set("onfree", true);
+					game.me.chooseButton(dialog, false).set("onfree", true);
 					"step 4";
+					if (!result || !result.bool || !result.links || !result.links[0]) {
+						event.goto(3);
+						return;
+					}
 					event.selected.push(result.links[0]);
 					event.list.remove(result.links[0]);
 					if (event.selected.length < 3) {
@@ -1890,6 +1907,7 @@ export default () => {
 					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
 					_status.firstAct = game.players[1];
+					_status.endlessCharacterChosen = true;
 					setTimeout(function () {
 						ui.arena.classList.remove("choose-character");
 					}, 500);
