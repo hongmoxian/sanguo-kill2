@@ -329,6 +329,8 @@ export default () => {
 			} else if (_status.mode == "endless") {
 				// The selection event needs a local player and stable ids before its dialog is created.
 				game.me = game.players[0];
+				_status.auto = false;
+				game.notMe = false;
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
@@ -1736,6 +1738,7 @@ export default () => {
 			chooseCharacterEndless: function () {
 				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;
+				next.player = game.me;
 				next.setContent(function () {
 					"step 0";
 					ui.arena.classList.add("choose-character");
@@ -1801,9 +1804,12 @@ export default () => {
 						event.selected = [savedPlayer].concat(event.saved.reserve || []).filter(function (name) {
 							return !!lib.character[name];
 						}).slice(0, 3);
-						event.list = (event.saved.list || []).filter(function (name) {
+						 event.list = (event.saved.list || []).filter(function (name) {
 							return !!lib.character[name] && !event.selected.includes(name);
 						}).slice(0);
+						event.list = event.list.filter(function (name, index, list) {
+							return list.indexOf(name) == index;
+						});
 						// Older saves may have written an empty/random pool after the
 						// enemy seats were initialized twice. Rebuild it instead of
 						// falling back to the same character for every seat.
