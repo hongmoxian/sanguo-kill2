@@ -62,6 +62,12 @@ export default () => {
 				lib.config.compatiblemode = true;
 			}
 			"step 1";
+			if (_status.mode == "endless" && !_status.connectMode) {
+				// A stale playback marker can intercept mode startup before the
+				// endless character-selection event is created.
+				localStorage.removeItem(lib.configprefix + "playback");
+				localStorage.removeItem(lib.configprefix + "playbackmode");
+			}
 			var playback = localStorage.getItem(lib.configprefix + "playback");
 			if (playback) {
 				ui.create.me();
