@@ -62,12 +62,6 @@ export default () => {
 				lib.config.compatiblemode = true;
 			}
 			"step 1";
-			if (_status.mode == "endless" && !_status.connectMode) {
-				// A stale playback marker can intercept mode startup before the
-				// endless character-selection event is created.
-				localStorage.removeItem(lib.configprefix + "playback");
-				localStorage.removeItem(lib.configprefix + "playbackmode");
-			}
 			var playback = localStorage.getItem(lib.configprefix + "playback");
 			if (playback) {
 				ui.create.me();
@@ -335,11 +329,6 @@ export default () => {
 			} else if (_status.mode == "endless") {
 				// The selection event needs a local player and stable ids before its dialog is created.
 				game.me = game.players[0];
-				_status.auto = false;
-				game.notMe = false;
-				if (ui.auto) ui.auto.classList.remove("glow");
-				if (ui.autonode) ui.autonode.hide();
-				_status.endlessCharacterChosen = false;
 				for (var i = 0; i < game.players.length; i++) {
 					game.players[i].getId();
 				}
@@ -1813,23 +1802,9 @@ export default () => {
 						event.selected = [savedPlayer].concat(event.saved.reserve || []).filter(function (name) {
 							return !!lib.character[name];
 						}).slice(0, 3);
-						 event.list = (event.saved.list || []).filter(function (name) {
+						event.list = (event.saved.list || []).filter(function (name) {
 							return !!lib.character[name] && !event.selected.includes(name);
 						}).slice(0);
-						event.list = event.list.filter(function (name, index, list) {
-							return list.indexOf(name) == index;
-						});
-						// Older saves may have written an empty/random pool after the
-						// enemy seats were initialized twice. Rebuild it instead of
-						// falling back to the same character for every seat.
-						if (event.list.length < 3) {
-							event.list = [];
-							for (var restoreName in lib.character) {
-								if (!event.selected.includes(restoreName) && !["zumo", "zhangchunhua", "star_shenzhaoyun", "sr_simayi"].includes(restoreName)) {
-									event.list.push(restoreName);
-								}
-							}
-						}
 						_status.endlessListAll = event.list.slice(0);
 						event.goto(5);
 						return;
@@ -1846,11 +1821,6 @@ export default () => {
 						].includes(i)) {
 							list.push(i);
 						}
-					}
-					if (!list.length) {
-						alert("无尽模式没有可用武将，请返回主菜单后重试");
-						event.finish();
-						return;
 					}
 					event.list = list;
 					event.selected = [];
@@ -1885,10 +1855,6 @@ export default () => {
 					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
 					game.me.chooseButton(dialog, true).set("onfree", true);
 					"step 4";
-					if (!result || !result.bool || !result.links || !result.links[0]) {
-						event.goto(3);
-						return;
-					}
 					event.selected.push(result.links[0]);
 					event.list.remove(result.links[0]);
 					if (event.selected.length < 3) {
@@ -1905,9 +1871,12 @@ export default () => {
 						game.players[0].hujia = event.saved.player.hujia || 0;
 						game.players[0].update();
 					}
+					for (var i = 1; i < game.players.length; i++) {
+						game.endlessInitCharacter(game.players[i], game.getEndlessCharacter() || "re_guojia", false);
+					}
+					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
 					_status.firstAct = game.players[1];
-					_status.endlessCharacterChosen = true;
 					setTimeout(function () {
 						ui.arena.classList.remove("choose-character");
 					}, 500);
