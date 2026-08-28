@@ -1775,6 +1775,13 @@ export default () => {
 					game.me = game.players[0];
 					_status.auto = false;
 					game.notMe = false;
+					// A previous interrupted battle may leave selection events in the
+					// local player's skip list, silently bypassing the save prompt and
+					// character dialog on the next Endless start.
+					if (game.me.skipList) {
+						game.me.skipList.remove("chooseControl");
+						game.me.skipList.remove("chooseButton");
+					}
 					ui.arena.classList.add("choose-character");
 					var saved = game.getEndlessSave();
 					if (saved) {

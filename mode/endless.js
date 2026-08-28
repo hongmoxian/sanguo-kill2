@@ -1,4 +1,4 @@
-import createVersusMode from "./versus.js?v=20260828-endless29";
+import createVersusMode from "./versus.js?v=20260828-endless30";
 
 export const type = "mode";
 
