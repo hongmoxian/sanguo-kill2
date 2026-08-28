@@ -2,7 +2,7 @@ import { lib, game, ui, get, ai, _status } from "../../noname.js";
 
 /** @type { importCharacterConfig['skill'] } */
 const skills = {
-	// DIY版完杀：不受当前回合限制，除濒死者本人外其他角色不能使用桃救援。
+	// DIY版完杀：不受当前回合限制，场上任何角色均不能使用桃。
 	diy_wansha: {
 		locked: true,
 		audio: ["wansha1.mp3", "wansha2.mp3"],
@@ -130,7 +130,18 @@ const skills = {
 				return cards.some(card => card.original != "j" && ["club", "spade"].includes(get.suit(card, event.player)) && get.position(card, true) == "d");
 			}
 			var evt = event.getParent().relatedEvent;
-			return !!evt && evt.name == "judge" && evt.player != player && event.cards.some(card => get.position(card, true) == "d" && ["club", "spade"].includes(get.suit(card)));
+			if (!evt) return false;
+			if (evt.name == "judge") {
+				return evt.player != player && event.cards.some(card => get.position(card, true) == "d" && ["club", "spade"].includes(get.suit(card)));
+			}
+			// 拼点牌也会进入弃牌堆，但不一定带有普通弃牌事件。
+			if (evt.name.startsWith("chooseToCompare")) {
+				return event.cards.some(card => {
+					if (get.position(card, true) != "d" || !["club", "spade"].includes(get.suit(card))) return false;
+					return !(evt.lose_list || []).some(item => item[0] == player && item[1] && item[1].includes(card));
+				});
+			}
+			return false;
 		},
 		async content(event, trigger, player) {
 			var cards = trigger.cards.slice(0);
@@ -140,6 +151,12 @@ const skills = {
 				cards = cards.filter(card => card.original != "j" && ["club", "spade"].includes(get.suit(card, trigger.player)) && get.position(card, true) == "d");
 			} else {
 				cards = cards.filter(card => get.position(card, true) == "d" && ["club", "spade"].includes(get.suit(card)));
+				var evt = trigger.getParent().relatedEvent;
+				if (evt && evt.name.startsWith("chooseToCompare")) {
+					cards = cards.filter(card => {
+						return !(evt.lose_list || []).some(item => item[0] == player && item[1] && item[1].includes(card));
+					});
+				}
 			}
 			if (cards.length) {
 				player.logSkill("diy_luoying");
