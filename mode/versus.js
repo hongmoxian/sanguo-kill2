@@ -1,5 +1,13 @@
 import { lib, game, ui, get, ai, _status } from "../noname.js";
+import diySkills from "../character/diy/skill.js?v=20260829-endless63";
+import yijiangSkills from "../character/yijiang/skill.js?v=20260829-endless63";
+import shenhuaSkills from "../character/shenhua/skill.js?v=20260829-endless63";
+import yijiangTranslate from "../character/yijiang/translate.js?v=20260829-endless63";
+import shenhuaTranslate from "../character/shenhua/translate.js?v=20260829-endless63";
 export const type = "mode";
+// start() 的 step 风格 content 由 StepCompiler 在受限作用域内重新执行，
+// 模块顶层的 import 变量在其中不可见，因此挂到 lib 上供 step 内容访问。
+lib.endlessDiyFallback = { diySkills, yijiangSkills, shenhuaSkills, yijiangTranslate, shenhuaTranslate };
 /**
  * @type { () => importModeConfig }
  */
@@ -44,6 +52,23 @@ export default () => {
 				lib.config.mode = "endless";
 			}
 			if (_status.mode == "endless") {
+				// Ensure DIY skill definitions exist even when the character pack was
+				// disabled before Endless starts. 注意：step 内容的作用域里拿不到模块
+				// 顶层 import，必须经由 lib.endlessDiyFallback 访问。
+				for (var skillName in lib.endlessDiyFallback.diySkills) {
+					if (!lib.skill[skillName]) lib.skill[skillName] = lib.endlessDiyFallback.diySkills[skillName];
+				}
+				// DIY Zhang Chunhua also references skills owned by packs that may not be
+				// enabled in the current profile (惴恐/固政). Register those dependencies
+				// before endlessInitCharacter() attaches the character skill list.
+				if (!lib.skill.oldzhuikong && lib.endlessDiyFallback.yijiangSkills.oldzhuikong) lib.skill.oldzhuikong = lib.endlessDiyFallback.yijiangSkills.oldzhuikong;
+				if (!lib.skill.guzheng && lib.endlessDiyFallback.shenhuaSkills.guzheng) lib.skill.guzheng = lib.endlessDiyFallback.shenhuaSkills.guzheng;
+				for (var dependencyName of ["oldzhuikong", "oldzhuikong_info"]) {
+					if (!lib.translate[dependencyName] && lib.endlessDiyFallback.yijiangTranslate[dependencyName]) lib.translate[dependencyName] = lib.endlessDiyFallback.yijiangTranslate[dependencyName];
+				}
+				for (var dependencyName of ["guzheng", "guzheng_info"]) {
+					if (!lib.translate[dependencyName] && lib.endlessDiyFallback.shenhuaTranslate[dependencyName]) lib.translate[dependencyName] = lib.endlessDiyFallback.shenhuaTranslate[dependencyName];
+				}
 				// Endless reuses and replaces player seats frequently. Scan current skills at
 				// trigger time so custom skills do not depend on a stale hook registry.
 				lib.config.compatiblemode = true;
@@ -464,8 +489,7 @@ export default () => {
 					});
 					game.phaseLoop(firstChoose);
 				} else if (_status.mode == "endless") {
-					_status.first_less = true;
-					_status.first_less_forced = true;
+					// 无尽模式不启用 versus 的“先手少摸一张”平衡，摸牌阶段正常摸 2 张。
 					var endlessSave = _status.endlessRestore;
 					_status.endlessBig = endlessSave ? endlessSave.big : 3;
 					_status.endlessSmall = endlessSave ? endlessSave.small : 1;
@@ -475,7 +499,8 @@ export default () => {
 					_status.endlessShaBonus = endlessSave ? endlessSave.shaBonus : 0;
 					game.addGlobalSkill("endless_sha_bonus");
 					game.updateEndlessStatus();
-					var firstChoose = game.players[1];
+					// 无尽模式：玩家一号位先行动，敌人按座位顺序依次行动。
+					var firstChoose = game.players[0];
 					game.gameDraw(firstChoose);
 					game.endlessMulligan(game.me);
 					game.cacheEndlessProgress(game.me);
@@ -814,7 +839,12 @@ export default () => {
 				player.node.count.hide();
 			},
 			endlessPrepareEnemies: function (draw) {
-				var count = Math.min(7, _status.endlessBig || 1);
+				// 3-1 关固定 3 名敌人（1v3），后续关卡随 endlessBig 提升，至多 7 名。
+				var count = Math.min(7, Math.max(3, _status.endlessBig || 1));
+				// 若关卡切换发生在某个敌人的回合中，其座位的继承残余回合将在此处理：
+				// 结束残余回合，并为该座位的新敌人插入完整的新回合（从“回合开始”走起，
+				// 玩家的知命/惴恐/变天等回合开始技能可正常对其发动）。
+				var currentTurn = _status.event && _status.event.getParent ? _status.event.getParent("phase") : null;
 				var seats = game.players.concat(game.dead).sort(function (a, b) {
 					return parseInt(a.dataset.position) - parseInt(b.dataset.position);
 				});
@@ -832,6 +862,12 @@ export default () => {
 							enemy.update();
 						}
 						if (draw) enemy.draw(4 + Math.min(2, Math.floor((_status.endlessCompleted || 0) / 5)));
+						// 该座位正处于其回合中：结束继承的残余回合，插入完整的新回合
+						if (currentTurn && !currentTurn.finished && currentTurn.player == enemy) {
+							game.log(enemy, "以新形态加入战场，回合重新开始");
+							currentTurn.finish();
+							enemy.insertPhase("endless_replace", true);
+						}
 					} else {
 						game.endlessDeactivate(enemy);
 					}
@@ -1781,23 +1817,14 @@ export default () => {
 				});
 			},
 			chooseCharacterEndless: function () {
-				// createEvent() normally uses eventManager.tempEvent first. That value can
-				// survive a mode restart and leave this picker attached to an old battle.
-				// Bind it to the currently executing event instead.
-				var manager = _status.eventManager;
-				var parent = manager && manager.eventStack && manager.eventStack.length
-					? manager.eventStack[manager.eventStack.length - 1]
-					: undefined;
-				var next = game.createEvent("chooseCharacter", true, parent);
+				// async/await 版选将器：不依赖 step/goto 编译语义，避免步骤跳转在
+				// StepCompiler 下产生 undefined 属性访问导致空牌桌。
+				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;
-				next.setContent(function () {
-					"step 0";
+				next.setContent(async function (event) {
 					game.me = game.players[0];
 					_status.auto = false;
 					game.notMe = false;
-					// A previous interrupted battle may leave selection events in the
-					// local player's skip list, silently bypassing the save prompt and
-					// character dialog on the next Endless start.
 					if (game.me.skipList) {
 						game.me.skipList.remove("chooseControl");
 						game.me.skipList.remove("chooseButton");
@@ -1805,142 +1832,91 @@ export default () => {
 					}
 					ui.arena.classList.add("choose-character");
 					var saved = game.getEndlessSave();
+					var restore = false;
+					delete _status.endlessRestore;
 					if (saved) {
-						game.me.chooseControl("继续无尽存档", "开始新的无尽游戏")
+						var choice = await game.me.chooseControl("继续无尽存档", "开始新的无尽游戏")
 							.set("prompt", "检测到无尽模式存档（" + saved.big + "-" + saved.small + "），是否继续？")
-							.set("ai", function () {
-								return "继续无尽存档";
-							});
-						event.saved = saved;
-					} else event.goto(2);
-					"step 1";
-					if (event.saved && result.control == "继续无尽存档") {
-						var savedPlayer = event.saved.player && event.saved.player.name;
-						if (!savedPlayer) {
+							.set("ai", function () { return "继续无尽存档"; })
+							.forResult();
+						if (choice && choice.control == "继续无尽存档" && saved.player && saved.player.name) {
+							_status.endlessRestore = saved;
+							restore = true;
+						} else {
 							game.clearEndlessSave();
-							event.saved = null;
-							event.goto(2);
-							return;
+							saved = null;
+							delete _status.endlessRestore;
+							_status.endlessShaBonus = 0;
+							_status.endlessCompleted = 0;
+							_status.endlessPoints = 0;
 						}
-						_status.endlessRestore = event.saved;
-						event.restore = true;
-						event.goto(2);
-						return;
-					} else {
-						game.clearEndlessSave();
-						event.saved = null;
-						event.restore = false;
-						delete _status.endlessRestore;
-						_status.endlessShaBonus = 0;
-						_status.endlessCompleted = 0;
-						_status.endlessPoints = 0;
-						event.goto(2);
 					}
-					"step 2";
-					// Character packs are imported before the splash selection and disabled packs
-					// only live in characterPack. Merge them here so switching into endless from
-					// another mode still gets the complete selection pool.
+					// 将所有已加载武将包的角色并入选将池（无尽模式无视包启用状态）。
 					for (var packName in lib.characterPack) {
 						var characterPack = lib.characterPack[packName];
 						if (!characterPack || Array.isArray(characterPack)) continue;
 						for (var characterName in characterPack) {
-							if (!lib.character[characterName]) {
-								lib.character[characterName] = characterPack[characterName];
-							}
+							if (!lib.character[characterName]) lib.character[characterName] = characterPack[characterName];
 						}
 					}
-					// DIY can be disabled in the normal character-pack settings, but it
-					// must remain available in Endless mode.
 					if (lib.characterPack.diy && lib.characterPack.diy.diy_zhangchunhua) {
 						lib.character.diy_zhangchunhua = lib.characterPack.diy.diy_zhangchunhua;
 					}
-					if (event.restore) {
-						var savedPlayer = event.saved.player.name;
+					var selected;
+					var list;
+					if (restore) {
+						var savedPlayer = saved.player.name;
 						if (!lib.character[savedPlayer]) {
 							game.clearEndlessSave();
-							event.saved = null;
-							event.restore = false;
-							event.goto(2);
-							return;
-						}
-						event.selected = [savedPlayer].concat(event.saved.reserve || []).filter(function (name) {
-							return !!lib.character[name];
-						}).slice(0, 3);
-						event.list = (event.saved.list || []).filter(function (name) {
-							return !!lib.character[name] && !event.selected.includes(name);
-						}).slice(0);
-						_status.endlessListAll = event.list.slice(0);
-						event.goto(5);
-						return;
-					}
-					var list = [];
-					for (i in lib.character) {
-						// Endless free selection intentionally ignores the enabled character-pack
-						// setting; every character already loaded by the game is selectable.
-						if (![
-							"zumo",
-							"zhangchunhua",
-							"star_shenzhaoyun",
-							"sr_simayi",
-						].includes(i)) {
-							list.push(i);
+							delete _status.endlessRestore;
+							restore = false;
+						} else {
+							selected = [savedPlayer].concat(saved.reserve || []).filter(function (name) {
+								return !!lib.character[name];
+							}).slice(0, 3);
+							list = (saved.list || []).filter(function (name) {
+								return !!lib.character[name] && !selected.includes(name);
+							}).slice(0);
+							if (list.length > 60) list = list.slice(0, 60);
 						}
 					}
-					event.list = list;
-					event.selected = [];
+					if (!restore) {
+						list = [];
+						for (var i in lib.character) {
+							if (!["zumo", "zhangchunhua", "star_shenzhaoyun", "sr_simayi"].includes(i)) {
+								list.push(i);
+							}
+						}
+						list.randomSort();
+						list = list.slice(0, 60);
+						if (lib.character.diy_zhangchunhua && !list.includes("diy_zhangchunhua")) list.unshift("diy_zhangchunhua");
+						selected = [];
+					}
 					_status.endlessListAll = list.slice(0);
-					event.goto(3);
-					"step 3";
-					// 官网规则是每轮从已有武将中自由选择，不是固定随机候选池。
-					// Use the full character browser instead of a compact candidate-button list.
-					var dialog = ui.create.characterDialog(
-						"heightset",
-						function (name) {
-							return !event.list.includes(name);
-						},
-						"expandall",
-						"unrestricted"
-					);
-					// Keep the DIY character visible on the first page; the complete pool
-					// and pagination remain available for every other character.
-					if (event.selected.length === 0 && dialog.paginationMap) {
-						var characterButtons = dialog.content.querySelector(".buttons");
-						var pagination = characterButtons && dialog.paginationMap.get(characterButtons);
-						var diyButton = dialog.buttons.find(function (button) {
-							return button.link === "diy_zhangchunhua";
-						});
-						if (pagination && diyButton) {
-							pagination.state.data = [diyButton].concat(pagination.state.data.filter(function (button) {
-								return button !== diyButton;
-							}));
-							pagination.gotoPage(1);
-						}
+					while (selected.length < 3) {
+						var dialog = ui.create.dialog("选择武将", [list, "character"]);
+						dialog.setCaption("全武将自由选择（第 " + (selected.length + 1) + "/3 名）");
+						var result = await game.me.chooseButton(dialog, true).set("onfree", true).forResult();
+						if (!result || !result.links || !result.links.length) return;
+						selected.push(result.links[0]);
+						list.remove(result.links[0]);
 					}
-					dialog.setCaption("全武将自由选择（第 " + (event.selected.length + 1) + "/3 名）");
-					game.me.chooseButton(dialog, true).set("onfree", true);
-					"step 4";
-					event.selected.push(result.links[0]);
-					event.list.remove(result.links[0]);
-					if (event.selected.length < 3) {
-						event.goto(3);
-						return;
-					}
-					"step 5";
-					_status.endlessReserve = event.selected.slice(1);
-					_status.endlessList = event.saved && event.saved.list ? event.saved.list.slice(0) : event.list;
-					game.endlessInitCharacter(game.players[0], event.selected[0], true);
-					if (event.saved && event.saved.player) {
-						game.players[0].maxHp = event.saved.player.maxHp;
-						game.players[0].hp = event.saved.player.hp;
-						game.players[0].hujia = event.saved.player.hujia || 0;
+					_status.endlessReserve = selected.slice(1);
+					_status.endlessList = restore && saved.list ? saved.list.slice(0) : list;
+					game.endlessInitCharacter(game.players[0], selected[0], true);
+					if (restore && saved.player) {
+						game.players[0].maxHp = saved.player.maxHp;
+						game.players[0].hp = saved.player.hp;
+						game.players[0].hujia = saved.player.hujia || 0;
 						game.players[0].update();
 					}
-					for (var i = 1; i < game.players.length; i++) {
-						game.endlessInitCharacter(game.players[i], game.getEndlessCharacter() || "re_guojia", false);
+					for (var j = 1; j < game.players.length; j++) {
+						game.endlessInitCharacter(game.players[j], game.getEndlessCharacter() || "re_guojia", false);
 					}
 					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
-					_status.firstAct = game.players[1];
+					// 无尽模式：玩家一号位先行动，敌人按座位顺序依次行动。
+					_status.firstAct = game.players[0];
 					_status.endlessCharacterChosen = true;
 					setTimeout(function () {
 						ui.arena.classList.remove("choose-character");
@@ -1948,6 +1924,7 @@ export default () => {
 				});
 				return next;
 			},
+
 			chooseCharacterFour: function () {
 				var next = game.createEvent("chooseCharacter");
 				next.showConfig = true;

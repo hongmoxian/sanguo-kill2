@@ -1,5 +1,5 @@
 import { game, get, lib, boot, onload } from "../noname.js";
-import { canUseHttpProtocol, sendUpdate } from "../noname/init/index.js";
+import { canUseHttpProtocol, sendUpdate } from "../noname/init/index.js?v=20260829-endless63";
 
 let [core, version] = get.coreInfo();
 

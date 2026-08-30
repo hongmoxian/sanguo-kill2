@@ -36,3 +36,11 @@ downloadExtension.html
 update.html
 update.js
 noname-server.exe
+
+# 本地调试残留（Chrome 调试 profile / CDP 脚本 / 测试截图）
+.chrome-*/
+.chrome-debug/
+.cdp-*.mjs
+.cdp-check.mjs
+.cdp-nav.mjs
+*.log

@@ -229,7 +229,10 @@ export async function boot() {
 	const loadCssPromise = loadCss();
 	const loadConfigPromise = loadConfig();
 	await loadCssPromise;
-	const config2 = await loadConfigPromise;
+	const loadedConfig = await loadConfigPromise;
+	// loadConfig 在 IndexedDB/localStorage 均无配置数据时可能返回 false，
+	// 此时必须给 boot 一个可变配置对象，否则 config2.mode 赋值直接抛错。
+	const config2 = loadedConfig && typeof loadedConfig == "object" ? loadedConfig : {};
 	const requestedMode = new URLSearchParams(location.search).get("mode") || (new URLSearchParams(location.search).get("build")?.startsWith("endless") ? "endless" : null);
 	if (requestedMode === "endless") {
 		// A direct browser URL must win over the mode persisted by the previous game.

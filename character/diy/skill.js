@@ -30,56 +30,31 @@ const skills = {
 	diy_shayi: {
 		locked: true,
 		audio: ["shencai1.mp3", "shencai2.mp3"],
-		trigger: { player: "phaseUseBegin" },
-		forced: true,
-		async content(event, trigger, player) {
-			await player.showHandcards();
-			player.addTempSkill("diy_shayi_limit", "phaseUseEnd");
-			if (player.hasCard(card => get.name(card) == "sha", "h")) player.draw();
-			player.addTempSkill("diy_shayi_effect", "phaseUseEnd");
+		// 全部效果静态写在主技能上（此环境下回合开始挂临时技能的机制不可靠）：
+		// 出牌阶段使用杀无距离/次数限制；黑色手牌可当杀使用，不限次数。
+		mod: {
+			targetInRange(card, player) {
+				if (player && player.isPhaseUsing() && get.name(card) == "sha") return true;
+			},
+			cardUsable(card, player) {
+				if (player && player.isPhaseUsing() && get.name(card) == "sha") return Infinity;
+			},
 		},
-		subSkill: {
-			limit: {
-				charlotte: true,
-				trigger: { source: "damageBegin1" },
-				forced: true,
-				filter(event) {
-					return event.card && get.name(event.card) == "sha";
-				},
-				content(event, trigger) {
-					trigger.num++;
-				},
-				mod: {
-					targetInRange(card) {
-						if (get.name(card) == "sha") return true;
-					},
-					cardUsable(card, player) {
-						if (get.name(card) == "sha") return Infinity;
-					},
-				},
-			},
-			effect: {
-				audio: false,
-				enable: "chooseToUse",
-				filter(event, player) {
-					return player.hasCard(card => get.color(card) == "black", "h") && event.filterCard({ name: "sha" }, player, event);
-				},
-				filterCard(card) {
-					return get.color(card) == "black";
-				},
-				position: "h",
-				viewAs: { name: "sha" },
-				selectCard: 1,
-				prompt: "将一张黑色牌当作【杀】使用",
-				mod: {
-					targetInRange(card) {
-						if (card.name == "sha") return true;
-					},
-					cardUsable(card) {
-						if (card.name == "sha") return Infinity;
-					},
-				},
-			},
+		enable: "chooseToUse",
+		filter(event, player) {
+			return player.isPhaseUsing() && player.hasCard(card => get.color(card) == "black", "h") && event.filterCard({ name: "sha" }, player, event);
+		},
+		filterCard(card) {
+			return get.color(card) == "black";
+		},
+		position: "h",
+		viewAs: { name: "sha" },
+		selectCard: 1,
+		prompt: "将一张黑色牌当作【杀】使用",
+		ai: {
+			order: 4,
+			value: 5,
+			useful: 5,
 		},
 	},
 	diy_zhenhun: {
@@ -7920,7 +7895,7 @@ const skills = {
 		trigger: { source: "damageBefore" },
 		forced: true,
 		content: function () {
-			if (trigger.card && get.name(trigger.card) == "sha" && trigger.source && trigger.source.hasSkill("diy_shayi_limit")) {
+			if (trigger.card && get.name(trigger.card) == "sha" && trigger.source && trigger.source.isPhaseUsing()) {
 				trigger.num++;
 			}
 			trigger.cancel();
@@ -8556,6 +8531,369 @@ const skills = {
 			}
 		},
 	},
+
+	//==================== 刘徽 - 割圆/解术/股算 ====================
+
+	// 割圆【锁定技】：游戏开始时将 A-K（1-13）随机排列成圆环；有牌进入弃牌堆时，
+	// 点数满足圆环进度的牌被记录入圆环；圆环完成后获得弃牌堆和场上所有首尾点数的牌，
+	// 然后将首尾两个点数移出圆环重新开始。股算觉醒后：圆环完成改为依次选择三名角色，
+	// 分别执行 摸三张牌/弃四张牌/手牌与牌堆底五张牌交换，结算完毕重新开启圆环。
+	diy_geiyuan: {
+		locked: true,
+		audio: 2,
+		// 高优先级：先于落英等捡牌效果结算，确保“弃牌先入堆记录点数，再被捡走”。
+		priority: 15,
+		init(player, skill) {
+			// 无尽模式复用玩家对象：每次获得技能都强制重建圆环并清觉醒标记，
+			// 防止上一局的觉醒状态残留到新对局。
+			var order = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+			order.randomSort();
+			player.storage.diy_geiyuan = {
+				order: order,
+				lit: [],
+			};
+			player.storage.diy_gusuan = false;
+			lib.diyGeiyuanUI.ensure();
+			lib.diyGeiyuanUI.refresh();
+		},
+		onremove(player) {
+			delete player.storage.diy_geiyuan;
+			lib.diyGeiyuanUI.stop();
+		},
+		trigger: { global: ["cardsDiscardAfter", "loseAfter"] },
+		forced: true,
+		filter(event, player) {
+			var info = player.storage.diy_geiyuan;
+			if (!info || !info.order.length) return false;
+			if (event.name == "lose" && (event.type != "discard" || event.getlx === false)) return false;
+			return event.cards && event.cards.length > 0;
+		},
+		// 全部结算用 async 函数式 content：与落英同机制，完整闭包、无 step 沙盒隔离，
+		// 状态修改（含移除首尾、进度清零）保证真实生效。
+		async content(event, trigger, player) {
+			var info = player.storage.diy_geiyuan;
+			if (!info) return;
+			var frontier = lib.diyGeiyuanFrontier(info);
+			var beforeFrontier = frontier.join("/") || "无";
+			var cards = trigger.cards || [];
+			var nums = cards.map(function (card) {
+				return get.number(card);
+			});
+			// 以弃牌堆为准：只统计当前确实在弃牌堆里的牌——被落英等效果捡走的牌
+			// 已回到手里（位置不是弃牌堆），不重复计入。本批点数去重后按两端蔓延。
+			var unique = [];
+			for (var i = 0; i < cards.length; i++) {
+				var num0 = get.number(cards[i]);
+				if (num0 && get.position(cards[i], true) == "d" && !lib.diyGyHas(unique, num0)) unique.push(Number(num0));
+			}
+			for (var i = 0; i < unique.length; i++) {
+				var num = unique[i];
+				if (lib.diyGyHas(info.lit, num)) continue;
+				if (!info.lit.length) {
+					// 第一张进入弃牌堆的牌：点亮其点数作为起始点。
+					// 已移除点数的牌不应点亮，否则会污染圆环。
+					if (!lib.diyGyHas(info.order, num)) continue;
+					info.lit.push(num);
+				} else if (lib.diyGyHas(frontier, num)) {
+					// 点数与已点亮区域两端相邻：从该端蔓延点亮
+					info.lit.push(num);
+				}
+				frontier = lib.diyGeiyuanFrontier(info);
+			}
+			// 本批没有点亮任何新点（重复触发/无匹配）时不进入完成结算，
+			// 避免同一批弃牌因双触发重复弹三选。
+			if (!litAny || info.lit.length < info.order.length) return;
+			// 全部点亮：首尾点数从 lit 推导（首 = 起始点，末 = 最后点亮的点）
+			var first = Number(info.lit[0]);
+			var last = Number(info.lit[info.lit.length - 1]);
+			game.log(player, "的圆环全部点亮了（首", get.cnNumber(first, true), "末", get.cnNumber(last, true), "）");
+			// 统计弃牌堆和场上所有首尾点数的牌
+			var gainCards = [];
+			for (var i = 0; i < ui.discardPile.childNodes.length; i++) {
+				var card = ui.discardPile.childNodes[i];
+				if (get.number(card) == first || get.number(card) == last) gainCards.push(card);
+			}
+			game.countPlayer(function (current) {
+				current.getCards("ej").forEach(function (card) {
+					if (get.number(card) == first || get.number(card) == last) gainCards.push(card);
+				});
+			});
+			if (info.order.length > 3) {
+				// 未觉醒：获得首尾点数的牌，移除首尾两个点数，重新开始圆环
+				// （移除与清零经由模块层 helper 直接操作真实存储，规避 step 沙盒写回丢失）
+				if (gainCards.length) {
+					game.log(player, "获得了", gainCards.length, "张首尾点数的牌");
+					await player.gain(gainCards, "gain2", "log");
+				}
+				lib.diyGeiyuanApplyResult(player, true);
+				return;
+			}
+			// 觉醒后（剩余3点）：依次选择至多三名角色，摸三张牌/弃四张牌/手牌与牌堆底五张牌交换
+			var alive = game.countPlayer();
+			var num = Math.min(3, alive);
+			var promptText =
+				num >= 3
+					? "依次选择三名角色：第1名摸三张牌，第2名弃四张牌，第3名将手牌与牌堆底五张牌交换"
+					: "依次选择" + get.cnNumber(num) + "名角色：第1名摸三张牌，第2名弃四张牌";
+			var result = await player
+				.chooseTarget([num, num], true, promptText, function (card, player, target) {
+					return target.isIn();
+				})
+				.set("ai", function (target) {
+					return get.attitude(_status.event.player, target) + (target == _status.event.player ? 10 : 0);
+				})
+				.forResult();
+			var list = (result && result.targets) || [];
+			if (list[0] && list[0].isIn()) {
+				game.log(list[0], "摸三张牌");
+				list[0].draw(3);
+			}
+			if (list[1] && list[1].isIn() && list[1].countCards("he")) {
+				game.log(list[1], "弃四张牌");
+				list[1].chooseToDiscard(4, true, "弃置四张牌", "he");
+			}
+			if (list[2] && list[2].isIn()) {
+				var hand = list[2].getCards("h");
+				for (var j = 0; j < hand.length; j++) {
+					var hx = hand[j];
+					hx.fix();
+					ui.cardPile.appendChild(hx);
+				}
+				var bottom = [];
+				for (var k = 0; k < 5; k++) {
+					var bcard = ui.cardPile.lastChild;
+					if (!bcard) break;
+					bcard.fix();
+					bottom.push(bcard);
+					ui.cardPile.removeChild(bcard);
+				}
+				if (bottom.length) {
+					game.log(list[2], "将手牌与牌堆底五张牌交换");
+					await list[2].gain(bottom, "draw");
+				}
+			}
+			// 重新开启圆环（3 点不清除，进度清零循环；清零经由模块层 helper 保证真实生效）
+			lib.diyGeiyuanApplyResult(player, false);
+			game.log(player, "重新开启了圆环（剩余3点）");
+			lib.diyGeiyuanUI.refresh();
+		},
+	},
+
+	diy_jieshu: {
+		locked: true,
+		audio: 2,
+		mod: {
+			maxHandcard(player, num) {
+				var info = player.storage.diy_geiyuan;
+				if (!info) return num;
+				// 不在圆环中的点数不计入手牌上限（强制转数字比较）
+				return num + player.countCards("h", function (card) {
+					return !lib.diyGyHas(info.order, get.number(card));
+				});
+			},
+		},
+		trigger: { player: ["useCardAfter", "respondAfter", "phaseDiscardBegin"] },
+		forced: true,
+		filter(event, player) {
+			var info = player.storage.diy_geiyuan;
+			if (!info) return false;
+			if (event.name == "phaseDiscard") {
+				// 有“不计上限”的牌时给出提示
+				return player.countCards("h", function (card) {
+					return !lib.diyGyHas(info.order, get.number(card));
+				}) > 0;
+			}
+			if (!event.card) return false;
+			// 只有使用/打出的牌点数为圆环两端待点亮的点数时才摸牌
+			return lib.diyGyHas(lib.diyGeiyuanFrontier(info), get.number(event.card));
+		},
+		content: function () {
+			if (trigger.name == "phaseDiscard") {
+				var count = player.countCards("h", function (card) {
+					return !lib.diyGyHas(player.storage.diy_geiyuan.order, get.number(card));
+				});
+				game.log(player, "有", count, "张牌因【解术】不计入手牌上限");
+			} else {
+				player.draw();
+				lib.diyGeiyuanUI.refresh();
+			}
+		},
+	},
+
+	// 股算【觉醒技】：每个回合结束时，若圆环剩余点数为 3 个，
+	// 减 1 点体力上限并修改【割圆】。
+	diy_gusuan: {
+		juexingji: true,
+		forced: true,
+		skillAnimation: true,
+		animationColor: "gray",
+		// 觉醒只由圆环剩余点数决定：剩 3 个点时，回合开始直接觉醒。
+		trigger: { global: "phaseBegin" },
+		filter(event, player) {
+			var info = player.storage.diy_geiyuan;
+			return !!info && !player.storage.diy_gusuan && info.order.length == 3;
+		},
+		content: function () {
+			"step 0";
+			player.loseMaxHp(1);
+			"step 1";
+			player.storage.diy_gusuan = true;
+			player.awakenSkill("diy_gusuan");
+			game.log(player, "修改了技能【割圆】");
+			lib.diyGeiyuanUI.refresh();
+		},
+	},
+};
+
+//==================== 割圆 圆环 UI（动画与提示） ====================
+// 屏幕右侧常驻圆环面板：A-K 随机排列；已记录点数灰色，当前需要的点数黄色高亮，
+// 首点蓝圈、末点橙圈；底部显示进度与“免上限”张数。每 400ms 自动刷新。
+lib.diyGeiyuanUI = {
+	_timer: null,
+	ensure() {
+		if (this._timer) return;
+		if (!document.getElementById("diy-geiyuan-style")) {
+			var st = document.createElement("style");
+			st.id = "diy-geiyuan-style";
+			st.textContent =
+				".diy-geiyuan-root{position:fixed;right:8px;top:50%;transform:translateY(-50%);width:184px;height:206px;z-index:89;pointer-events:none;background:rgba(0,0,0,.35);border-radius:8px;padding:4px 0;}" +
+				".diy-geiyuan-title{text-align:center;font-weight:bold;color:#fff;font-family:simhei;font-size:14px;}" +
+				".diy-gy-node{position:absolute;width:30px;height:30px;border-radius:50%;background:#fff;color:#333;border:1px solid #888;display:flex;align-items:center;justify-content:center;font-size:13px;font-family:simhei;box-sizing:border-box;}" +
+				".diy-geiyuan-foot{text-align:center;font-size:11px;color:#ccc;}";
+			document.head.appendChild(st);
+		}
+		this._timer = setInterval(() => {
+			try {
+				this.refresh();
+			} catch (e) {}
+		}, 400);
+	},
+	stop() {
+		if (this._timer) {
+			clearInterval(this._timer);
+			delete this._timer;
+		}
+		var root = ui.window && ui.window.querySelector(".diy-geiyuan-root");
+		if (root) root.remove();
+	},
+	refresh() {
+		if (!ui.window) return;
+		var player = game.me;
+		var info = player && player.storage && player.storage.diy_geiyuan;
+		if (!player || !info || !info.order || !info.order.length || !player.hasSkill("diy_geiyuan")) {
+			var dead = ui.window.querySelector(".diy-geiyuan-root");
+			if (dead) dead.remove();
+			return;
+		}
+		var root = ui.window.querySelector(".diy-geiyuan-root");
+		if (!root) {
+			root = document.createElement("div");
+			root.classList.add("diy-geiyuan-root");
+			ui.window.appendChild(root);
+		}
+		var lit = (info.lit || []).map(Number);
+		var frontier = lib.diyGeiyuanFrontier(info);
+		var exempt = player.countCards("h", function (card) {
+			return !lib.diyGyHas(info.order, get.number(card));
+		});
+		var sig = info.order.join(",") + "|" + lit.join(",") + "|" + (info.order.length <= 3 ? 1 : 0) + "|" + player.countCards("h") + "|" + exempt;
+		if (root.dataset.sig == sig) return;
+		root.dataset.sig = sig;
+		var awake = info.order.length <= 3;
+		var html = "<div class='diy-geiyuan-title' style='color:" + (awake ? "#e6c34a" : "#fff") + "'>" + (awake ? "割圆·改" : "割圆") + "</div><div style='position:relative;width:184px;height:170px;'>";
+		var W = 184,
+			R = 62,
+			size = 30;
+		var total = info.order.length;
+		for (var i = 0; i < total; i++) {
+			var ang = (i / total) * Math.PI * 2 - Math.PI / 2;
+			var cx = W / 2 + R * Math.sin(ang) - size / 2;
+			var cy = 85 + R * Math.cos(ang) - size / 2;
+			var num = info.order[i];
+			var isLit = lit.includes(num);
+			var isFrontier = frontier.includes(num);
+			var style = "left:" + Math.round(cx) + "px;top:" + Math.round(cy) + "px;";
+			if (isLit) {
+				style += "background:#9e9e9e;color:#555;border-color:#777;";
+			} else if (isFrontier) {
+				style += "background:#d7e35f;color:#333;border:2px solid #8a9a0b;font-weight:bold;";
+			}
+			// 首末点数从 lit 推导（首 = 起始点，末 = 最后点亮的点）
+			var first = lit.length ? lit[0] : null,
+				last = lit.length ? lit[lit.length - 1] : null;
+			if (num === first && num === last) style += "box-shadow:0 0 0 2px #b06ad9;";
+			else if (num === first) style += "box-shadow:0 0 0 2px #4a90d9;";
+			else if (num === last) style += "box-shadow:0 0 0 2px #d97b4a;";
+			var label = {1: 'A', 11: 'J', 12: 'Q', 13: 'K'}[num] || num;
+			if (num === first && num === last) label += "<span style='font-size:9px;color:#b06ad9'>首末</span>";
+			else if (num === first) label += "<span style='font-size:9px;color:#4a90d9'>首</span>";
+			else if (num === last) label += "<span style='font-size:9px;color:#d97b4a'>末</span>";
+			html += "<div class='diy-gy-node' style='" + style + "'>" + label + "</div>";
+		}
+		html += "</div>";
+		html += "<div class='diy-geiyuan-foot'>已点亮 " + lit.length + "/" + total + " · 免上限 " + exempt + " 张</div>";
+		html += "<div class='diy-geiyuan-foot'>待点亮: <span style='color:#e6c34a'>" + (frontier.length ? frontier.join("、") : "无") + "</span></div>";
+		html += "<div class='diy-geiyuan-foot'><span style='background:#d7e35f;color:#333;padding:0 3px;border-radius:3px;'>待点亮</span> <span style='color:#bbb'>灰=已点亮</span></div>";
+		if (!lit.length) html += "<div class='diy-geiyuan-foot' style='color:#e6c34a'>等待首张弃牌…</div>";
+		root.innerHTML = html;
+	},
+};
+
+// 圆环两端待点亮的点数（从已点亮弧线两端双向蔓延）
+// 所有比较强制转数字，避免存储值类型不一致导致 includes 失配。
+lib.diyGyHas = function (arr, num) {
+	num = Number(num);
+	if (isNaN(num) || !Array.isArray(arr)) return false;
+	for (var i = 0; i < arr.length; i++) {
+		if (Number(arr[i]) === num) return true;
+	}
+	return false;
+};
+// 完成结算的“移除首尾 + 进度清零”：在模块域直接操作真实存储。
+// step 沙盒内对状态的某些写法（splice 重置、属性重新赋值）在部分环境下不持久化，
+// 统一收敛到这里保证真实生效。complete = true 时移除首尾两点，否则仅清空点亮进度。
+lib.diyGeiyuanApplyResult = function (player, complete) {
+	try {
+		var target = player && player.storage && player.storage.diy_geiyuan ? player : game.me;
+		var info = target && target.storage && target.storage.diy_geiyuan;
+		if (!info) return;
+		var first = info.lit.length ? Number(info.lit[0]) : NaN;
+		var last = info.lit.length ? Number(info.lit[info.lit.length - 1]) : NaN;
+		if (complete && info.order.length > 3) {
+			// 原地删除首尾点数并去重（纯 in-place 操作：pop/splice，不重新赋值）
+			var kept = [];
+			for (var i = info.order.length - 1; i >= 0; i--) {
+				var n = Number(info.order[i]);
+				if (n === first || n === last || kept.includes(n)) {
+					info.order.splice(i, 1);
+				} else {
+					kept.push(n);
+				}
+			}
+			game.log("【割圆】移除后圆环: ", info.order.join("/"));
+		}
+		// 进度清零（原地删除）
+		for (var i2 = info.lit.length - 1; i2 >= 0; i2--) info.lit.splice(i2, 1);
+	} catch (e) {
+		console.error("diyGeiyuanApplyResult", e);
+	}
+};
+
+lib.diyGeiyuanFrontier = function (info) {
+	// 圆环两端待点亮的点数：每个未点亮的点，只要相邻（左右）有已点亮的点，
+	// 即为待点亮。第一性枚举实现，对任意点亮形态（连续弧线/分散/环绕闭合）都正确。
+	var order = (info.order || []).map(Number);
+	var lit = (info.lit || []).map(Number);
+	if (!lit.length || lit.length >= order.length) return [];
+	var res = [];
+	for (var i = 0; i < order.length; i++) {
+		var num = order[i];
+		if (lit.includes(num)) continue;
+		var prev = order[(i - 1 + order.length) % order.length];
+		var next = order[(i + 1) % order.length];
+		if (lit.includes(prev) || lit.includes(next)) res.push(num);
+	}
+	return res;
 };
 
 export default skills;
