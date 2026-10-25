@@ -8581,6 +8581,8 @@ const skills = {
 			});
 			// 以弃牌堆为准：只统计当前确实在弃牌堆里的牌——被落英等效果捡走的牌
 			// 已回到手里（位置不是弃牌堆），不重复计入。本批点数去重后按两端蔓延。
+			// 本次事件处理前已点亮的数量，用来判断本批是否产生新点亮。
+			var litBefore = info.lit.length;
 			var unique = [];
 			for (var i = 0; i < cards.length; i++) {
 				var num0 = get.number(cards[i]);
@@ -8602,7 +8604,7 @@ const skills = {
 			}
 			// 本批没有点亮任何新点（重复触发/无匹配）时不进入完成结算，
 			// 避免同一批弃牌因双触发重复弹三选。
-			if (!litAny || info.lit.length < info.order.length) return;
+			if (info.lit.length === litBefore || info.lit.length < info.order.length) return;
 			// 全部点亮：首尾点数从 lit 推导（首 = 起始点，末 = 最后点亮的点）
 			var first = Number(info.lit[0]);
 			var last = Number(info.lit[info.lit.length - 1]);
