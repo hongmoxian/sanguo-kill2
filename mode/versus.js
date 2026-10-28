@@ -746,28 +746,31 @@ export default () => {
 				if (!ui.endlessLevel) ui.endlessLevel = ui.create.system(label, null, true);
 				else ui.endlessLevel.innerHTML = label;
 			},
+			// 无尽模式玩家可以选择 DIY 武将，但敌方 AI 不能获得 DIY 武将。
+			// 同时检查 DIY 包成员与 diy_ 前缀（兼容其他来源或旧存档中的 DIY 角色）。
+			isEndlessEnemyCharacter: function (name) {
+				return typeof name == "string" && !!lib.character[name]
+					&& !["zumo", "zhangchunhua", "star_shenzhaoyun", "sr_simayi"].includes(name)
+					&& !name.startsWith("diy_")
+					&& !(lib.characterPack.diy && Object.prototype.hasOwnProperty.call(lib.characterPack.diy, name));
+			},
 			getEndlessCharacter: function () {
 				var list = (_status.endlessList || []).filter(function (name, index, pool) {
-					return typeof name == "string" && pool.indexOf(name) == index;
+					return game.isEndlessEnemyCharacter(name) && pool.indexOf(name) == index;
 				});
 				_status.endlessList = list;
 				if (list.length < 3) {
 					var savedPool = (_status.endlessListAll || []).filter(function (name, index, pool) {
-						return typeof name == "string" && pool.indexOf(name) == index;
+						return game.isEndlessEnemyCharacter(name) && pool.indexOf(name) == index;
 					});
 					if (savedPool.length >= 3) list = savedPool;
 				}
 				_status.endlessList = list;
 				if (!list.length) {
-					list = (_status.endlessListAll || []).slice(0);
+					list = (_status.endlessListAll || []).filter(game.isEndlessEnemyCharacter);
 					if (!list.length) {
-						// A legacy save can contain an empty pool. Rebuild it from
-						// the loaded character table so every enemy gets a real,
-						// distinct candidate instead of the same fallback hero.
-						var excluded = ["zumo", "zhangchunhua", "star_shenzhaoyun", "sr_simayi"];
-						list = Object.keys(lib.character).filter(function (name) {
-							return !excluded.includes(name) && lib.character[name];
-						});
+						// 旧存档可能只有 DIY 或候选池已耗尽：从非 DIY 武将重新补充。
+						list = Object.keys(lib.character).filter(game.isEndlessEnemyCharacter);
 					}
 					_status.endlessList = list;
 				}
@@ -913,6 +916,8 @@ export default () => {
 			},
 			endlessInitCharacter: function (player, name, side) {
 				if (!player) return;
+				// 防止敌方因旧存档、异常武将池或外部调用而初始化成 DIY 武将。
+				if (!side && !game.isEndlessEnemyCharacter(name)) name = "re_guojia";
 				// Skill triggers are only registered for players that already have a playerid.
 				if (!player.playerid) player.getId();
 				var cards = player.getCards("hej");
@@ -2035,8 +2040,9 @@ export default () => {
 							selected = [savedPlayer].concat(saved.reserve || []).filter(function (name) {
 								return !!lib.character[name];
 							}).slice(0, 3);
+							// 兼容旧存档：旧版敌方候选池可能含 DIY，读档时直接剔除。
 							list = (saved.list || []).filter(function (name) {
-								return !!lib.character[name] && !selected.includes(name);
+								return game.isEndlessEnemyCharacter(name) && !selected.includes(name);
 							}).slice(0);
 							if (list.length > 60) list = list.slice(0, 60);
 						}
@@ -2053,7 +2059,8 @@ export default () => {
 						if (lib.character.diy_zhangchunhua && !list.includes("diy_zhangchunhua")) list.unshift("diy_zhangchunhua");
 						selected = [];
 					}
-					_status.endlessListAll = list.slice(0);
+					// 玩家选将列表仍包含 DIY，但 AI 的备用/回收候选池只保留非 DIY。
+					_status.endlessListAll = list.filter(game.isEndlessEnemyCharacter);
 					while (selected.length < 3) {
 						var dialog = ui.create.dialog("选择武将", [list, "character"]);
 						dialog.setCaption("全武将自由选择（第 " + (selected.length + 1) + "/3 名）");
@@ -2073,7 +2080,7 @@ export default () => {
 						_status.endlessDiySkills = selected.includes("diy_zhangchunhua") ? await game.endlessChooseDiySkills() : null;
 					}
 					_status.endlessReserve = selected.slice(1);
-					_status.endlessList = restore && saved.list ? saved.list.slice(0) : list;
+					_status.endlessList = (restore && saved.list ? saved.list : list).filter(game.isEndlessEnemyCharacter);
 					game.endlessInitCharacter(game.players[0], selected[0], true);
 					if (restore && saved.player) {
 						game.players[0].maxHp = saved.player.maxHp;

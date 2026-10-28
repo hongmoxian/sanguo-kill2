@@ -63,20 +63,37 @@ try{
   assert.deepEqual([...snap.configured].sort(),[...picker.after].sort());
   assert.deepEqual([...snap.save].sort(),[...picker.after].sort());
   assert.equal(snap.sourceCount,20);
+  // AI 不允许使用任何 DIY 包武将（包括 ns_ 等非 diy_ 前缀的 DIY 包成员），也不允许通过旧候选池/直接初始化绕过。
+  const aiGuard=await run(`import('/noname.js').then(({lib,game,_status})=>{const own=game.me;const diyNames=Object.keys(lib.characterPack.diy||{});const unusual=diyNames.find(n=>!n.startsWith('diy_')&&lib.character[n]);const normal='re_guojia';const before=game.players.filter(p=>p!==own).map(p=>p.name);const originalList=_status.endlessList;const originalAll=_status.endlessListAll;_status.endlessList=['diy_zhangchunhua',unusual,normal];_status.endlessListAll=['diy_zhangchunhua',unusual,normal];const draws=Array.from({length:18},()=>game.getEndlessCharacter());_status.endlessList=originalList;_status.endlessListAll=originalAll;const enemy=game.players.find(p=>p!==own);game.endlessInitCharacter(enemy,'diy_zhangchunhua',false);const rejectPrefix=enemy.name;game.endlessInitCharacter(enemy,unusual,false);const rejectPack=enemy.name;return {before,unusual,draws,rejectPrefix,rejectPack,pool:originalAll.slice(),isDiyAllowed:game.isEndlessEnemyCharacter('diy_zhangchunhua'),isPackAllowed:game.isEndlessEnemyCharacter(unusual),isNormalAllowed:game.isEndlessEnemyCharacter(normal),isPlayerDiy:own.name==='diy_zhangchunhua',initialAllowed:before.every(game.isEndlessEnemyCharacter),poolAllowed:originalAll.every(game.isEndlessEnemyCharacter)} })`);
+  console.log('AI_GUARD',JSON.stringify(aiGuard));
+  assert.equal(aiGuard.isPlayerDiy,true);
+  assert.equal(aiGuard.isDiyAllowed,false);assert.equal(aiGuard.isPackAllowed,false);assert.equal(aiGuard.isNormalAllowed,true);
+  assert.equal(aiGuard.initialAllowed,true,'AI initially selected a DIY package character');
+  assert.equal(aiGuard.poolAllowed,true,'AI candidate pool contains DIY package characters');
+  assert.ok(aiGuard.unusual,'Expected non-prefixed DIY package character');
+  assert.ok(aiGuard.before.every(n=>!n.startsWith('diy_')),'Initial AI used DIY');
+  assert.ok(aiGuard.draws.every(n=>n==='re_guojia'),'AI pool returned DIY');
+  assert.ok(aiGuard.pool.every(n=>!n.startsWith('diy_')),'AI source pool polluted');
+  assert.equal(aiGuard.rejectPrefix,'re_guojia');assert.equal(aiGuard.rejectPack,'re_guojia');
   // 与实际换将使用完全相同的初始化入口；角色重建不能恢复未选技能。
   const swapped=await run(`import('/noname.js').then(({game,_status})=>{game.endlessInitCharacter(game.me,'diy_zhangchunhua',true);return {active:game.me.skills.slice(),configured:_status.endlessDiySkills}})`);
   assert.deepEqual([...swapped.active].sort(),[...picker.after].sort());
   console.log("REINIT",JSON.stringify(swapped));
+  // 模拟旧版存档含 DIY 敌方候选名单：恢复时应保留玩家存档但排除敌方 DIY。
+  const legacy=await run(`import('/noname.js').then(({lib})=>{const key=lib.configprefix+'endless_save';const data=JSON.parse(localStorage.getItem(key));data.list=['diy_zhangchunhua','diy_wenyang','ns_zuoci',...data.list];localStorage.setItem(key,JSON.stringify(data));return data.list.slice(0,5)})`);
+  console.log('LEGACY_POOL_INJECTED',JSON.stringify(legacy));
   // 重载页面，走游戏自带“继续无尽存档”入口，不能重新弹技能选择器。
   await navigate();
   await until("[...document.querySelectorAll('.control>div')].some(x=>x.textContent.trim()==='继续无尽存档')");
   const clicked=await run("(()=>{const x=[...document.querySelectorAll('.control>div')].find(x=>x.textContent.trim()==='继续无尽存档');x.click();return true})()");
   assert.equal(clicked,true);
   await nap(5000);
-  const restored=await run(`import('/noname.js').then(({game,_status,lib})=>({name:game.me?.name,active:game.me?.skills?.slice(),configured:_status.endlessDiySkills,save:JSON.parse(localStorage.getItem(lib.configprefix+'endless_save')||'null')?.diySkills,pickerVisible:!!document.querySelector('#endless-diy-skill-picker')}))`);
+  const restored=await run(`import('/noname.js').then(({game,_status,lib})=>({name:game.me?.name,active:game.me?.skills?.slice(),configured:_status.endlessDiySkills,save:JSON.parse(localStorage.getItem(lib.configprefix+'endless_save')||'null')?.diySkills,pickerVisible:!!document.querySelector('#endless-diy-skill-picker'),enemyCandidates:_status.endlessList.slice(),enemyNames:game.players.filter(p=>p!==game.me).map(p=>p.name)}))`);
   console.log("RESTORED",JSON.stringify(restored));
   assert.equal(restored.name,'diy_zhangchunhua');
   assert.equal(restored.pickerVisible,false);
+  assert.ok(restored.enemyCandidates.every(n=>!n.startsWith('diy_')&&!['ns_zuoci'].includes(n)),'Legacy AI pool still contains DIY');
+  assert.ok(restored.enemyNames.every(n=>!n.startsWith('diy_')&&!['ns_zuoci'].includes(n)),'Restored enemy contains DIY');
   assert.deepEqual([...restored.active].sort(),[...picker.after].sort());
   assert.deepEqual([...restored.configured].sort(),[...picker.after].sort());
   assert.deepEqual([...restored.save].sort(),[...picker.after].sort());
