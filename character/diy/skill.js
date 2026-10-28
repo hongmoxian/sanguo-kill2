@@ -2,7 +2,7 @@ import { lib, game, ui, get, ai, _status } from "../../noname.js";
 
 /** @type { importCharacterConfig['skill'] } */
 const skills = {
-	// DIY版完杀：不受当前回合限制，场上任何角色均不能使用桃。
+	// DIY版完杀：不受当前回合限制，持有者可使用【桃】，其他角色不能使用【桃】。
 	diy_wansha: {
 		locked: true,
 		audio: ["wansha1.mp3", "wansha2.mp3"],
@@ -19,11 +19,11 @@ const skills = {
 		mod: {
 			cardSavable(card, player) {
 				if (card.name != "tao") return;
-				if (game.hasPlayer(current => current.hasSkill("diy_wansha"))) return false;
+				if (!player?.hasSkill("diy_wansha") && game.hasPlayer(current => current.hasSkill("diy_wansha"))) return false;
 			},
 			cardEnabled(card, player) {
 				if (card.name != "tao") return;
-				if (game.hasPlayer(current => current.hasSkill("diy_wansha"))) return false;
+				if (!player?.hasSkill("diy_wansha") && game.hasPlayer(current => current.hasSkill("diy_wansha"))) return false;
 			},
 		},
 	},
@@ -8540,7 +8540,8 @@ const skills = {
 	// 分别执行 摸三张牌/弃四张牌/手牌与牌堆底五张牌交换，结算完毕重新开启圆环。
 	diy_geiyuan: {
 		locked: true,
-		audio: 2,
+		// 沿用刘徽【割圆】原版双语音，不依赖选定包是否开启。
+		audio: ["dcgeyuan1.mp3", "dcgeyuan2.mp3"],
 		// 高优先级：先于落英等捡牌效果结算，确保“弃牌先入堆记录点数，再被捡走”。
 		priority: 15,
 		init(player, skill) {
@@ -8683,7 +8684,7 @@ const skills = {
 
 	diy_jieshu: {
 		locked: true,
-		audio: 2,
+		audio: ["dcjieshu1.mp3", "dcjieshu2.mp3"],
 		mod: {
 			maxHandcard(player, num) {
 				var info = player.storage.diy_geiyuan;
@@ -8725,6 +8726,7 @@ const skills = {
 	// 股算【觉醒技】：每个回合结束时，若圆环剩余点数为 3 个，
 	// 减 1 点体力上限并修改【割圆】。
 	diy_gusuan: {
+		audio: ["dcgusuan1.mp3", "dcgusuan2.mp3"],
 		juexingji: true,
 		forced: true,
 		skillAnimation: true,

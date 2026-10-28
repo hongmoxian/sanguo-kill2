@@ -2,12 +2,14 @@ import { lib, game, ui, get, ai, _status } from "../noname.js";
 import diySkills from "../character/diy/skill.js?v=20260829-endless63";
 import yijiangSkills from "../character/yijiang/skill.js?v=20260829-endless63";
 import shenhuaSkills from "../character/shenhua/skill.js?v=20260829-endless63";
+import huicuiSkills from "../character/huicui/skill.js?v=20261027-liuzhuan";
 import yijiangTranslate from "../character/yijiang/translate.js?v=20260829-endless63";
 import shenhuaTranslate from "../character/shenhua/translate.js?v=20260829-endless63";
+import huicuiTranslate from "../character/huicui/translate.js?v=20261027-liuzhuan";
 export const type = "mode";
 // start() 的 step 风格 content 由 StepCompiler 在受限作用域内重新执行，
 // 模块顶层的 import 变量在其中不可见，因此挂到 lib 上供 step 内容访问。
-lib.endlessDiyFallback = { diySkills, yijiangSkills, shenhuaSkills, yijiangTranslate, shenhuaTranslate };
+lib.endlessDiyFallback = { diySkills, yijiangSkills, shenhuaSkills, huicuiSkills, yijiangTranslate, shenhuaTranslate, huicuiTranslate };
 /**
  * @type { () => importModeConfig }
  */
@@ -63,11 +65,27 @@ export default () => {
 				// before endlessInitCharacter() attaches the character skill list.
 				if (!lib.skill.oldzhuikong && lib.endlessDiyFallback.yijiangSkills.oldzhuikong) lib.skill.oldzhuikong = lib.endlessDiyFallback.yijiangSkills.oldzhuikong;
 				if (!lib.skill.guzheng && lib.endlessDiyFallback.shenhuaSkills.guzheng) lib.skill.guzheng = lib.endlessDiyFallback.shenhuaSkills.guzheng;
+				// 刘巴【流转】复用原版技能，包括标记、回收及目标限制的子技能。
+				if (!lib.skill.dcliuzhuan && lib.endlessDiyFallback.huicuiSkills.dcliuzhuan) {
+					lib.skill.dcliuzhuan = lib.endlessDiyFallback.huicuiSkills.dcliuzhuan;
+				}
+				// 本模式可能关闭汇粹包，流转的派生技能在翻译注册完成后初始化。
 				for (var dependencyName of ["oldzhuikong", "oldzhuikong_info"]) {
 					if (!lib.translate[dependencyName] && lib.endlessDiyFallback.yijiangTranslate[dependencyName]) lib.translate[dependencyName] = lib.endlessDiyFallback.yijiangTranslate[dependencyName];
 				}
 				for (var dependencyName of ["guzheng", "guzheng_info"]) {
 					if (!lib.translate[dependencyName] && lib.endlessDiyFallback.shenhuaTranslate[dependencyName]) lib.translate[dependencyName] = lib.endlessDiyFallback.shenhuaTranslate[dependencyName];
+				}
+				for (var dependencyName of ["dcliuzhuan", "dcliuzhuan_info", "dcliuzhuan_tag"]) {
+					if (!lib.translate[dependencyName] && lib.endlessDiyFallback.huicuiTranslate[dependencyName]) lib.translate[dependencyName] = lib.endlessDiyFallback.huicuiTranslate[dependencyName];
+				}
+				if (lib.skill.dcliuzhuan && (!lib.skill.dcliuzhuan_mark || !lib.skill.dcliuzhuan_gain || !lib.skill.dcliuzhuan_tag)) game.finishSkill("dcliuzhuan");
+				// 割圆(priority=15)必须先记录点数；流转(priority=10)再回收转牌；落英(默认优先级)最后捡剩余黑牌。
+				// 避免同一张黑色“转”牌同时满足落英与流转，出现手动选择技能并被前一技能抢走。
+				if (lib.skill.dcliuzhuan_gain) {
+					lib.skill.dcliuzhuan_gain.priority = 10;
+					// get.priority 会缓存计算结果；清除旧值，确保无尽模式实际采用新优先级。
+					delete lib.skill.dcliuzhuan_gain._priority;
 				}
 				// Endless reuses and replaces player seats frequently. Scan current skills at
 				// trigger time so custom skills do not depend on a stale hook registry.
@@ -92,6 +110,8 @@ export default () => {
 			if (_status.mode == "endless") {
 				_status.endlessCharacterChosen = false;
 				_status.endlessSelectionPending = false;
+				// 新一轮启动只从当前存档恢复技能配置，不沿用上一次对局的内存状态。
+				delete _status.endlessDiySkills;
 			}
 			"step 1";
 			var playback = localStorage.getItem(lib.configprefix + "playback");
@@ -753,7 +773,100 @@ export default () => {
 				}
 				return list.randomRemove() || "re_guojia";
 			},
-			getEndlessSave: function () {
+			// DIY 张春华原始的 20 项技能：永远从武将包读取，不从当前角色已启用技能反推。
+		getEndlessDiySkillPool: function () {
+			var info = lib.characterPack.diy && lib.characterPack.diy.diy_zhangchunhua || lib.character.diy_zhangchunhua;
+			var skills = Array.isArray(info) ? info[3] : info && info.skills;
+			return Array.isArray(skills) ? skills.slice(0) : [];
+		},
+		// 新开局选完武将后弹窗；默认全选，可选 0–20 项。读档时不调用此函数。
+		endlessChooseDiySkills: function () {
+			var skills = game.getEndlessDiySkillPool();
+			return new Promise(resolve => {
+				var overlay = document.createElement("div");
+				overlay.id = "endless-diy-skill-picker";
+				overlay.style.cssText = "position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box;color:#f9eed8;overflow:hidden;";
+				var panel = document.createElement("div");
+				// 游戏会缩放 body（transform:scale），直接插在 body 下的 fixed 弹窗也被缩放、裁切。
+				// 因此弹窗挂在 html 下，独立于游戏画面的缩放和绝对定位样式。
+				// 使用确定的视口内高度，列表才会成为独立滚动区，底部确认按钮始终可见。
+				panel.style.cssText = "position:relative;width:min(760px,96vw);height:min(580px,calc(100dvh - 20px));max-height:calc(100dvh - 20px);min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#29231e;border:2px solid #ae8d56;border-radius:12px;box-shadow:0 12px 40px #000b;padding:14px;box-sizing:border-box;font-family:serif;";
+				var title = document.createElement("div");
+				title.style.cssText = "position:relative;font-size:22px;font-weight:bold;text-align:center;margin-bottom:7px;flex-shrink:0;";
+				title.textContent = "DIY 张春华 · 自选技能";
+				panel.appendChild(title);
+				var tip = document.createElement("div");
+				tip.style.cssText = "position:relative;font-size:13px;line-height:1.5;text-align:center;color:#dec9a3;margin-bottom:9px;flex-shrink:0;";
+				tip.textContent = "勾选本局启用的技能。选择会随存档保留，过关、换将、读档均不重置。";
+				panel.appendChild(tip);
+				var actions = document.createElement("div");
+				actions.style.cssText = "position:relative;display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:9px;flex-shrink:0;flex-wrap:wrap;";
+				var count = document.createElement("span");
+				count.id = "endless-diy-skill-count";
+				var makeButton = (label, action) => {
+					var btn = document.createElement("button");
+					btn.type = "button";
+					btn.textContent = label;
+					btn.style.cssText = "background:#594532;color:#ffedca;border:1px solid #bd965b;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px;";
+					btn.addEventListener("click", action);
+					return btn;
+				};
+				var grid = document.createElement("div");
+				grid.id = "endless-diy-skill-list";
+				grid.tabIndex = 0; // 可用鼠标滚轮、触屏滑动和方向键滚动
+				grid.style.cssText = "position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));align-content:start;gap:8px;flex:1 1 0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:thin;padding:9px;background:#1d1a17;border:1px solid #69533c;border-radius:8px;";
+				var inputs = [];
+				var updateCount = () => count.textContent = `已选 ${inputs.filter(i => i.checked).length} / ${skills.length} 项`;
+				for (var skill of skills) {
+					var label = document.createElement("label");
+					label.style.cssText = "display:flex;gap:8px;align-items:center;padding:8px;background:#383027;border-radius:6px;cursor:pointer;font-size:16px;";
+					var input = document.createElement("input");
+					input.type = "checkbox";
+					input.value = skill;
+					input.checked = true;
+					input.className = "endless-diy-skill-choice";
+					input.style.cssText = "width:17px;height:17px;accent-color:#d3ad62;cursor:pointer;flex-shrink:0;";
+					input.addEventListener("change", updateCount);
+					inputs.push(input);
+					label.append(input);
+					var name = document.createElement("span");
+					name.textContent = get.translation(skill) || skill;
+					label.title = lib.translate[skill + "_info"] || skill;
+					label.append(name);
+					grid.append(label);
+				}
+				actions.append(makeButton("全选", () => { inputs.forEach(i => i.checked = true); updateCount(); }));
+				actions.append(makeButton("全不选", () => { inputs.forEach(i => i.checked = false); updateCount(); }));
+				actions.append(count);
+				panel.append(actions, grid);
+				var footer = document.createElement("div");
+				footer.style.cssText = "position:relative;display:flex;justify-content:center;margin-top:10px;flex-shrink:0;";
+				var confirm = makeButton("确认技能并开始游戏", () => {
+					var enabled = inputs.filter(i => i.checked).map(i => i.value);
+					window.removeEventListener("resize", fitToViewport);
+					window.visualViewport?.removeEventListener("resize", fitToViewport);
+					overlay.remove();
+					resolve(enabled);
+				});
+				confirm.id = "endless-diy-skill-confirm";
+				confirm.style.cssText += "font-weight:bold;font-size:17px;padding:10px 25px;background:#85632e;";
+				footer.append(confirm);
+				panel.append(footer);
+				overlay.append(panel);
+				// 用实际可见视口高度限制弹窗；窗口缩放时再次计算，底部按钮始终留在屏内。
+				var fitToViewport = () => {
+					var available = Math.max(190, window.innerHeight - 48);
+					panel.style.height = Math.min(580, available) + "px";
+					panel.style.maxHeight = available + "px";
+				};
+				document.documentElement.append(overlay);
+				fitToViewport();
+				window.addEventListener("resize", fitToViewport);
+				window.visualViewport?.addEventListener("resize", fitToViewport);
+				updateCount();
+			});
+		},
+		getEndlessSave: function () {
 				try {
 					var save = JSON.parse(localStorage.getItem(lib.configprefix + "endless_save"));
 					if (!save || save.version != 1 || !save.player || typeof save.player.name != "string") {
@@ -793,6 +906,8 @@ export default () => {
 					},
 					reserve: (_status.endlessReserve || []).slice(0),
 					list: (_status.endlessList || []).slice(0),
+					// null=未配置（非 DIY 对局）；[]=主动关闭全部技能，不能与缺失字段混淆。
+					diySkills: Array.isArray(_status.endlessDiySkills) ? _status.endlessDiySkills.slice(0) : null,
 				};
 				localStorage.setItem(lib.configprefix + "endless_save", JSON.stringify(save));
 			},
@@ -804,7 +919,52 @@ export default () => {
 				if (cards.length) game.cardsDiscard(cards);
 				if (player.isDead()) player.revive(null, false);
 				if (player.name1) player.uninit();
-				player.init(name);
+				// 在 init 前过滤技能，确保未勾选的技能连 init()/被动触发都不会加载。
+				// 不修改原武将包；初始化后恢复 lib.character，敌方/其他模式不受影响。
+				var diyConfigured = name === "diy_zhangchunhua" && side && Array.isArray(_status.endlessDiySkills);
+				var originalDefinition = lib.character[name];
+				if (diyConfigured && originalDefinition) {
+					var permitted = game.getEndlessDiySkillPool().filter(skill => _status.endlessDiySkills.includes(skill));
+					if (Array.isArray(originalDefinition)) {
+						var definition = originalDefinition.slice(0);
+						definition[3] = permitted;
+						lib.character[name] = definition;
+					} else {
+						lib.character[name] = { ...originalDefinition, skills: permitted };
+					}
+				}
+				try {
+					player.init(name);
+				} finally {
+					if (diyConfigured && originalDefinition) lib.character[name] = originalDefinition;
+				}
+				// 玩家初始化可能重新展开技能并覆盖子技能定义；必须在 init 之后配置。
+				// 仅无尽模式 DIY 张春华启用“标记流转也播台词”，原版刘巴保持不变。
+				if (name === "diy_zhangchunhua" && lib.skill.dcliuzhuan_mark) {
+					lib.skill.dcliuzhuan_mark = {
+						...lib.skill.dcliuzhuan_mark,
+						audio: "dcliuzhuan",
+						popup: true,
+						silent: false,
+						// DIY 强化：包括其他角色自己摸牌阶段内的 gainBegin。
+						// 其余角色（含刘巴）仍遵循原版“摸牌阶段不标转”。
+						filter(event, owner) {
+							if (owner === event.player || event.player !== _status.currentPhase) return false;
+							if (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua") return true;
+							const phaseDraw = event.getParent("phaseDraw");
+							return !phaseDraw || phaseDraw.name !== "phaseDraw";
+						},
+					};
+					// 依持有者身份显示技能描述；不改变其他角色的刘巴原版文案。
+					lib.dynamicTranslate.dcliuzhuan = owner => {
+						const description = lib.translate.dcliuzhuan_info || "";
+						if (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua") {
+							return description.replace("不于摸牌阶段而得到的牌", "（包括摸牌阶段）得到的牌");
+						}
+						return description;
+					};
+					delete lib.skill.dcliuzhuan_mark._priority;
+				}
 				// Ensure DIY skills are present after every endless-mode reinitialization.
 				var characterInfo = lib.character[name];
 				var characterSkills = [];
@@ -812,6 +972,7 @@ export default () => {
 					if (Array.isArray(characterInfo.skills)) characterSkills = characterInfo.skills.slice(0);
 					else if (Array.isArray(characterInfo[3])) characterSkills = characterInfo[3].slice(0);
 				}
+				if (diyConfigured) characterSkills = characterSkills.filter(skill => _status.endlessDiySkills.includes(skill));
 				for (var i = 0; i < characterSkills.length; i++) {
 					if (lib.skill[characterSkills[i]] && !player.hasSkill(characterSkills[i], true)) {
 						player.addSkill(characterSkills[i]);
@@ -1900,6 +2061,16 @@ export default () => {
 						if (!result || !result.links || !result.links.length) return;
 						selected.push(result.links[0]);
 						list.remove(result.links[0]);
+					}
+					// 只在新开局并选了 DIY 张春华（首发或备用）时弹窗。读档完全恢复旧选择。
+					var originalDiySkills = game.getEndlessDiySkillPool();
+					if (restore) {
+						// 兼容旧存档：没有 diySkills 字段时视为开启全部技能。
+						_status.endlessDiySkills = selected.includes("diy_zhangchunhua")
+							? (Array.isArray(saved.diySkills) ? originalDiySkills.filter(skill => saved.diySkills.includes(skill)) : originalDiySkills.slice(0))
+							: null;
+					} else {
+						_status.endlessDiySkills = selected.includes("diy_zhangchunhua") ? await game.endlessChooseDiySkills() : null;
 					}
 					_status.endlessReserve = selected.slice(1);
 					_status.endlessList = restore && saved.list ? saved.list.slice(0) : list;

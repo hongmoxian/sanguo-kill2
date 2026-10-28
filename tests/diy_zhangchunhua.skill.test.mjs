@@ -24,6 +24,7 @@ function load(path){let s=fs.readFileSync(path,"utf8").replace(/^import[^\n]*\n/
 const main=load("character/diy/skill.js");
 const guzheng=load("character/shenhua/skill.js").guzheng;
 const yijiang=load("character/yijiang/skill.js");
+const liuzhuan=load("character/huicui/skill.js").dcliuzhuan;
 const guose=load("character/standard/skill.js").guose;
 const skill=(n)=>main[n];
 const results=[]; const card=(n,s="spade",t="basic")=>({number:n,suit:s,type:t,name:n===1?"sha":"shan",position:"d",original:"h"});
@@ -56,7 +57,9 @@ await test("神道",async()=>{const p=mkPlayer([card(8)]),t=mkPlayer(),old=card(
 await test("隐世",()=>{const p=mkPlayer();ctx.player=p;ctx.trigger={num:3,cancel(){this.cancelled=true}};skill("diy_zch_yinshi").content();assert.equal(ctx.trigger.cancelled,true);assert.equal(p.drawn,3)});
 await test("落英",async()=>{const p=mkPlayer(),t=mkPlayer(),black=card(7,"club"),red=card(9,"heart");let e={name:"lose",type:"discard",cards:[black,red],player:t,getl:()=>null};assert.equal(skill("diy_luoying").filter(e,p),true);await skill("diy_luoying").content({},e,p);assert.equal(p.gained.length,1);assert.equal(p.gained[0],black)});
 await test("固政",()=>{const p=mkPlayer(),t=mkPlayer();t.getHistory=()=>[{type:"discard"}];const e={player:t};assert.equal(guzheng.filter(e,p),true);assert.equal(guzheng.filter({player:p},p),false)},"filter-only");
-await test("完杀",()=>{game.players=[{hasSkill:n=>n==="diy_wansha"}];assert.equal(skill("diy_wansha2").mod.cardSavable({name:"tao"},mkPlayer()),false);assert.equal(skill("diy_wansha2").mod.cardEnabled({name:"sha"},mkPlayer()),undefined)});
+await test("完杀：持有者可用桃、其他人不可用桃",()=>{const owner=mkPlayer(),other=mkPlayer();owner.hasSkill=n=>n==="diy_wansha";game.players=[owner,other];for(const method of ["cardSavable","cardEnabled"]){assert.equal(skill("diy_wansha2").mod[method]({name:"tao"},owner),undefined);assert.equal(skill("diy_wansha2").mod[method]({name:"tao"},other),false);assert.equal(skill("diy_wansha2").mod[method]({name:"sha"},other),undefined)}game.players=[other];assert.equal(skill("diy_wansha2").mod.cardEnabled({name:"tao"},other),undefined)});
+await test("流转：原版子技能与摸牌阶段判定",()=>{assert.deepEqual(Array.from(liuzhuan.group),["dcliuzhuan_mark","dcliuzhuan_gain"]);const owner=mkPlayer(),other=mkPlayer();_status.currentPhase=other;const normalGain={player:other,getParent:()=>null};assert.equal(liuzhuan.subSkill.mark.filter(normalGain,owner),true);assert.equal(liuzhuan.subSkill.mark.filter(normalGain,other),false);assert.equal(liuzhuan.subSkill.mark.filter({player:other,getParent:()=>({name:"phaseDraw"})},owner),false);_status.currentPhase=null;});
+await test("流转：带转标记的实体牌不能指定持有者",()=>{const tagged={hasGaintag:n=>n==="dcliuzhuan_tag"};const plain={hasGaintag:()=>false};assert.equal(liuzhuan.mod.targetEnabled({cards:[tagged]}),false);assert.equal(liuzhuan.mod.targetEnabled({cards:[plain]}),undefined)});
 await test("杀意",()=>{const p=mkPlayer([card(1,"spade")]);const s=skill("diy_shayi");assert.equal(s.mod.cardUsable({name:"sha"},p),Infinity);assert.equal(s.mod.targetInRange({name:"sha"},p),true);assert.equal(s.filter({filterCard:()=>true},p),true);assert.equal(s.filterCard(card(2,"heart")),false)});
 await test("镇魂",async()=>{const p=mkPlayer([card(2)]),t=mkPlayer(),u=mkPlayer();game.players=[p,t,u];await skill("diy_zhenhun").content({},null,p);assert.deepEqual(t.tmp,["diy_zhenhun_fengyin"]);assert.deepEqual(u.tmp,["diy_zhenhun_fengyin"])});
 await test("惴恐",()=>{const s=yijiang.oldzhuikong.inherit==="zhuikong"?yijiang.zhuikong:yijiang.oldzhuikong;const p=mkPlayer([card(1)],3,8),t=mkPlayer();assert.equal(s.filter({player:t},p),true);assert.equal(s.filter({player:t},mkPlayer([card(1)],8,8)),false)},"filter-only");
@@ -96,5 +99,6 @@ await test("割圆：不在弃牌堆的卡不应点亮",async()=>{
   await s.content({}, {name:"cardsDiscard",cards:[valid]},p);
   assert.equal(p.storage.diy_geiyuan.lit.length,2);
 });
+await test("刘徽三技能及刘巴流转：配音文件与字幕完整",()=>{const voiceSource=fs.readFileSync("character/diy/voices.js","utf8");for(const [skillName,prefix] of [["diy_geiyuan","dcgeyuan"],["diy_jieshu","dcjieshu"],["diy_gusuan","dcgusuan"]]){const audios=Array.from(skill(skillName).audio);assert.equal(audios.length,2);for(let i=1;i<=2;i++){const filename=`${prefix}${i}.mp3`;assert.equal(audios[i-1],filename);assert.ok(fs.statSync(`audio/skill/${filename}`).size>0);assert.ok(voiceSource.includes(`"#${prefix}${i}"`))}}assert.equal(liuzhuan.audio,2);for(let i=1;i<=2;i++){const filename=`dcliuzhuan${i}.mp3`;assert.ok(fs.statSync(`audio/skill/${filename}`).size>0);assert.ok(voiceSource.includes(`"#dcliuzhuan${i}"`))}});
 console.log(JSON.stringify({type:"raw-skill-function-execution",total:results.length,passed:results.filter(x=>x.status==="PASS").length,failed:results.filter(x=>x.status==="FAIL").length,results},null,2));
 if(results.some(x=>x.status==="FAIL"))process.exitCode=1;
