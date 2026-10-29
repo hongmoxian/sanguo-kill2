@@ -954,11 +954,99 @@ export default () => {
 					lib.dynamicTranslate.dcliuzhuan = owner => {
 						const description = lib.translate.dcliuzhuan_info || "";
 						if (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua") {
-							return description.replace("不于摸牌阶段而得到的牌", "（包括摸牌阶段）得到的牌");
+							return description.replace("不于摸牌阶段而得到的牌", "（包括摸牌阶段）得到的牌") + "④其他角色阵亡时，你获得其手中带‘转’的牌。";
 						}
 						return description;
 					};
 					delete lib.skill.dcliuzhuan_mark._priority;
+				}
+				// 此时 player.init 已完成，流转子技能才保证注册到 lib.skill。
+				if (name === "diy_zhangchunhua") {
+					// DIY 流转强化：回合结束弃牌、阵亡弃牌均回收手中带“转”的实体牌。
+					// 原版只检查 currentPhase，因此非当前回合阵亡或失去临时标记后的牌会漏判。
+					// 仅对 DIY 张春华采用扩展判定；其他刘巴持有者仍执行原版逻辑。
+					if (lib.skill.dcliuzhuan_gain && !lib.skill.dcliuzhuan_gain._endlessDiyExtended) {
+						const originalGain = lib.skill.dcliuzhuan_gain;
+						const originalGainFilter = originalGain.filter;
+						const originalGainContent = originalGain.content;
+						const diyOwner = owner => owner && (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua");
+						const transferredHandCards = event => {
+							if (event.name !== "lose" || event.position !== ui.discardPile) return [];
+							return (event.hs || []).filter(card =>
+								event.gaintag_map?.[card.cardid]?.includes("dcliuzhuan_tag") && get.position(card, true) === "d"
+							);
+						};
+						lib.skill.dcliuzhuan_gain = {
+							...originalGain,
+							_endlessDiyExtended: true,
+							logTarget: event => event.name === "lose" ? event.player : _status.currentPhase,
+							filter(event, owner) {
+								if (diyOwner(owner) && event.name === "lose" && event.player !== owner && transferredHandCards(event).length) return true;
+								return originalGainFilter.call(this, event, owner);
+							},
+							content: function () {
+								if (diyOwner(player) && trigger.name === "lose") {
+									const cards = transferredHandCards(trigger);
+									if (cards.length) {
+										player.gain(cards, "gain2");
+										return;
+									}
+								}
+								return originalGainContent.apply(this, arguments);
+							},
+						};
+						delete lib.skill.dcliuzhuan_gain._priority;
+					}
+					if (lib.skill.dcliuzhuan_tag && !lib.skill.dcliuzhuan_tag._endlessDiyDeathPreserve) {
+						const originalTag = lib.skill.dcliuzhuan_tag;
+						const originalTagOnremove = originalTag.onremove;
+						lib.skill.dcliuzhuan_tag = {
+							...originalTag,
+							_endlessDiyDeathPreserve: true,
+							onremove(owner, skill) {
+								// die 的 step3 先移除临时技能，step3 后半才丢弃死者手牌。
+								// 仅在 DIY 张春华持有流转且被标记者已经阵亡时保留牌的标记，
+								// 让后续 loseAfter 中的 gaintag_map 正确记录“转”。
+								if (_status.mode === "endless" && game.me?.name === "diy_zhangchunhua" &&
+									game.me.hasSkill("dcliuzhuan") && owner.isDead()) return;
+								if (typeof originalTagOnremove === "function") originalTagOnremove(owner, skill);
+							},
+						};
+					}
+				}
+				// 阵亡回收：die 触发发生在死亡确认之后、引擎清除临时技能和弃置死者手牌之前。
+				// 直接转交其手中仍带“转”的牌，防止 die step3 的临时标签清理造成丢失。
+				// 只给 DIY 张春华注册，刘巴原版不受影响。
+				if (name === "diy_zhangchunhua" && Array.isArray(_status.endlessDiySkills) && _status.endlessDiySkills.includes("dcliuzhuan")) {
+					if (!lib.skill.diy_endless_liuzhuan_deathgain) {
+						lib.skill.diy_endless_liuzhuan_deathgain = {
+							trigger: { global: "die" },
+							forced: true,
+							priority: 25,
+							popup: false,
+							silent: true, // 死亡回收在下方明确播放一次语音，避免引擎自动重复播报。
+							audio: false,
+							filter(event, owner) {
+								const isDiy = owner && (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua");
+								return _status.mode === "endless" && isDiy && event.player && event.player !== owner && owner.hasSkill("dcliuzhuan") &&
+									event.player.getCards("h").some(card => card.hasGaintag("dcliuzhuan_tag"));
+							},
+							content() {
+								const cards = trigger.player.getCards("h").filter(card => card.hasGaintag("dcliuzhuan_tag"));
+								if (cards.length) {
+									// 收回后这些牌不应继续携带敌方的临时“转”标签。
+									trigger.player.removeGaintag("dcliuzhuan_tag", cards);
+									game.trySkillAudio("dcliuzhuan_gain", player);
+									player.gain(cards, trigger.player, "gain2");
+								}
+							},
+						};
+					}
+					// 注册为流转的隐藏关联技能，不额外占用玩家勾选的20项技能名额。
+					const mainSkill = lib.skill.dcliuzhuan;
+					if (mainSkill && !mainSkill.group?.includes("diy_endless_liuzhuan_deathgain")) {
+						mainSkill.group = [...(mainSkill.group || []), "diy_endless_liuzhuan_deathgain"];
+					}
 				}
 				// Ensure DIY skills are present after every endless-mode reinitialization.
 				var characterInfo = lib.character[name];
