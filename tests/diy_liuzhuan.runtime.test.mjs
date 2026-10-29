@@ -17,7 +17,8 @@ await run("(()=>{const a=[...document.querySelectorAll('.control>div')].find(x=>
 await nap(900);
 for(let i=0;i<3;i++){const r=await run(`(()=>{const list=[...document.querySelectorAll('.dialog .button.character.selectable')];const x=list.find(x=>x.link==='diy_zhangchunhua')||list[0];if(!x)return null;x.click();return x.link})()`);if(!r)throw Error("选将失败 "+i);await nap(950);}
 await nap(600);
-const skillPicker=await run("(()=>{const p=document.querySelector('#endless-diy-skill-picker');if(!p)return {shown:false};const total=p.querySelectorAll('input.endless-diy-skill-choice').length;p.querySelector('#endless-diy-skill-confirm')?.click();return {shown:true,total}})()");
+// 流转专项测试只启用测试所需的流转/割圆/落英，避免其他主动技能的操作弹窗阻塞敌方回合。
+const skillPicker=await run("(()=>{const p=document.querySelector('#endless-diy-skill-picker');if(!p)return {shown:false};const items=[...p.querySelectorAll('input.endless-diy-skill-choice')];const keep=new Set(['dcliuzhuan','diy_geiyuan','diy_luoying']);items.forEach(x=>{x.checked=keep.has(x.value);x.dispatchEvent(new Event('change',{bubbles:true}))});p.querySelector('#endless-diy-skill-confirm')?.click();return {shown:true,total:items.length,selected:items.filter(x=>x.checked).map(x=>x.value)}})()");
 console.log('SKILL_PICKER',JSON.stringify(skillPicker));
 await nap(700);
 await run("(()=>{[...document.querySelectorAll('.control>div')].find(x=>x.textContent.trim()==='取消')?.click();})()");

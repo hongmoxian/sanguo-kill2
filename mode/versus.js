@@ -756,25 +756,20 @@ export default () => {
 			},
 			getEndlessCharacter: function () {
 				var list = (_status.endlessList || []).filter(function (name, index, pool) {
-					return game.isEndlessEnemyCharacter(name) && pool.indexOf(name) == index;
+					return game.isEndlessEnemyCharacter(name) && pool.indexOf(name) === index;
 				});
-				_status.endlessList = list;
-				if (list.length < 3) {
-					var savedPool = (_status.endlessListAll || []).filter(function (name, index, pool) {
-						return game.isEndlessEnemyCharacter(name) && pool.indexOf(name) == index;
-					});
-					if (savedPool.length >= 3) list = savedPool;
-				}
-				_status.endlessList = list;
+				// 抽完当前整轮候选后才补池；旧实现剩余不足3人就把同一批60人重新放回，
+				// 导致频繁重复，还可能跳过最后1~2名未出现的角色。
 				if (!list.length) {
-					list = (_status.endlessListAll || []).filter(game.isEndlessEnemyCharacter);
-					if (!list.length) {
-						// 旧存档可能只有 DIY 或候选池已耗尽：从非 DIY 武将重新补充。
-						list = Object.keys(lib.character).filter(game.isEndlessEnemyCharacter);
-					}
-					_status.endlessList = list;
+					list = (_status.endlessListAll || Object.keys(lib.character)).filter(function (name, index, pool) {
+						return game.isEndlessEnemyCharacter(name) && pool.indexOf(name) === index
+								&& !(_status.endlessReserve || []).includes(name) && name !== game.me?.name1;
+					});
+					list.randomSort();
 				}
-				return list.randomRemove() || "re_guojia";
+				var name = list.randomRemove() || "re_guojia";
+				_status.endlessList = list;
+				return name;
 			},
 			// DIY 张春华原始的 20 项技能：永远从武将包读取，不从当前角色已启用技能反推。
 		getEndlessDiySkillPool: function () {
@@ -877,14 +872,9 @@ export default () => {
 						return null;
 					}
 					var list = Array.isArray(save.list) ? save.list.filter(name => typeof name == "string") : [];
-					var unique = list.filter((name, index) => list.indexOf(name) == index);
-					if (unique.length < 3) {
-						// The old save format could persist an exhausted or duplicated
-						// enemy pool. It cannot restore a valid 1v3 stage, so start fresh.
-						this.clearEndlessSave();
-						return null;
-					}
-					save.list = unique;
+					// 候选池为空或不足3人是正常的长局情况，不能因此删除整份进度存档。
+					// 读档时会基于完整非 DIY 武将库补齐尚未候选的角色。
+					save.list = list.filter((name, index) => list.indexOf(name) === index);
 					return save;
 				} catch (e) {}
 				this.clearEndlessSave();
@@ -1997,6 +1987,10 @@ export default () => {
 						game.me.skipList.remove("chooseCharacter");
 					}
 					ui.arena.classList.add("choose-character");
+					// 引擎的10秒加载看门狗不应覆盖已经进入交互选将/读档的正常游戏。
+					// 在实际进入选择界面后取消它，不改变资源加载阶段的异常检测。
+					clearTimeout(window.resetGameTimeout);
+					delete window.resetGameTimeout;
 					var saved = game.getEndlessSave();
 					var restore = false;
 					delete _status.endlessRestore;
@@ -2044,7 +2038,7 @@ export default () => {
 							list = (saved.list || []).filter(function (name) {
 								return game.isEndlessEnemyCharacter(name) && !selected.includes(name);
 							}).slice(0);
-							if (list.length > 60) list = list.slice(0, 60);
+							// 兼容老存档的60人小池：保留其未使用候选，同时补入完整非 DIY 武将库。
 						}
 					}
 					if (!restore) {
@@ -2059,8 +2053,10 @@ export default () => {
 						if (lib.character.diy_zhangchunhua && !list.includes("diy_zhangchunhua")) list.unshift("diy_zhangchunhua");
 						selected = [];
 					}
-					// 玩家选将列表仍包含 DIY，但 AI 的备用/回收候选池只保留非 DIY。
-					_status.endlessListAll = list.filter(game.isEndlessEnemyCharacter);
+					// 玩家选将列表仍包含 DIY，但 AI 的候选库取所有合法武将，
+					// 不再受展示给玩家的60人选择列表限制。
+					var enemyPool = Object.keys(lib.character).filter(game.isEndlessEnemyCharacter);
+					_status.endlessListAll = enemyPool;
 					while (selected.length < 3) {
 						var dialog = ui.create.dialog("选择武将", [list, "character"]);
 						dialog.setCaption("全武将自由选择（第 " + (selected.length + 1) + "/3 名）");
@@ -2080,7 +2076,19 @@ export default () => {
 						_status.endlessDiySkills = selected.includes("diy_zhangchunhua") ? await game.endlessChooseDiySkills() : null;
 					}
 					_status.endlessReserve = selected.slice(1);
-					_status.endlessList = (restore && saved.list ? saved.list : list).filter(game.isEndlessEnemyCharacter);
+					var availableEnemies = enemyPool.filter(name => !selected.includes(name));
+					if (restore && Array.isArray(saved.list)) {
+						var savedRemaining = saved.list.filter((name, i, arr) => availableEnemies.includes(name) && arr.indexOf(name) === i);
+						var additional = availableEnemies.filter(name => !savedRemaining.includes(name));
+						additional.randomSort();
+						_status.endlessList = savedRemaining.concat(additional);
+					} else {
+						_status.endlessList = availableEnemies.randomSort();
+					}
+					// 在生成首批敌人前恢复关卡：此前直到 step 3 才设置 big，读档首关总是按3人初始化。
+					_status.endlessBig = restore ? Math.min(7, Math.max(3, Number(saved.big) || 3)) : 3;
+					_status.endlessSmall = restore ? Math.max(1, Number(saved.small) || 1) : 1;
+					_status.endlessLevel = _status.endlessBig;
 					game.endlessInitCharacter(game.players[0], selected[0], true);
 					if (restore && saved.player) {
 						game.players[0].maxHp = saved.player.maxHp;
@@ -2088,9 +2096,8 @@ export default () => {
 						game.players[0].hujia = saved.player.hujia || 0;
 						game.players[0].update();
 					}
-					for (var j = 1; j < game.players.length; j++) {
-						game.endlessInitCharacter(game.players[j], game.getEndlessCharacter() || "re_guojia", false);
-					}
+					// 只初始化一次敌将：过去这里先给7个座位抽将，随后 PrepareEnemies 又
+					// 重抽一批，开局白白消耗10名候选，加剧后续敌将重复。
 					game.endlessPrepareEnemies(false);
 					game.me = game.players[0];
 					// 无尽模式：玩家一号位先行动，敌人按座位顺序依次行动。

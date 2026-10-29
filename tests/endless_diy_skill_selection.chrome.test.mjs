@@ -4,10 +4,10 @@ const base="http://127.0.0.1:9252";
 const tab=await (await fetch(base+"/json/new?about:blank",{method:"PUT"})).json();
 const ws=new WebSocket(tab.webSocketDebuggerUrl);
 await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject});
-let id=0;const pending=new Map(),errors=[];
+let id=0;const pending=new Map(),errors=[],dialogs=[];
 const nap=ms=>new Promise(r=>setTimeout(r,ms));
 function send(method,params={}){return Promise.race([new Promise(resolve=>{const key=++id;pending.set(key,resolve);ws.send(JSON.stringify({id:key,method,params}))}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("CDP timeout "+method)),12000))])}
-ws.onmessage=e=>{let r=JSON.parse(e.data);if(r.id&&pending.has(r.id)){pending.get(r.id)(r);pending.delete(r.id)}if(r.method==="Page.javascriptDialogOpening")void send("Page.handleJavaScriptDialog",{accept:true});if(r.method==="Runtime.exceptionThrown")errors.push(r.params?.exceptionDetails?.exception?.description||r.params?.exceptionDetails?.text);};
+ws.onmessage=e=>{let r=JSON.parse(e.data);if(r.id&&pending.has(r.id)){pending.get(r.id)(r);pending.delete(r.id)}if(r.method==="Page.javascriptDialogOpening"){dialogs.push(r.params?.message||'');void send("Page.handleJavaScriptDialog",{accept:true});}if(r.method==="Runtime.exceptionThrown")errors.push(r.params?.exceptionDetails?.exception?.description||r.params?.exceptionDetails?.text);};
 await send("Page.enable");await send("Runtime.enable");
 async function run(expression){const o=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});if(o.result?.exceptionDetails)throw Error(JSON.stringify(o.result.exceptionDetails).slice(0,1400));if(o.result?.result?.subtype==="error")throw Error(o.result.result.description);return o.result?.result?.value;}
 async function until(expr,limit=11000){const start=Date.now();while(Date.now()-start<limit){const r=await run(expr);if(r)return r;await nap(250)}throw Error("Timeout waiting for "+expr.slice(0,110));}
@@ -80,7 +80,7 @@ try{
   assert.deepEqual([...swapped.active].sort(),[...picker.after].sort());
   console.log("REINIT",JSON.stringify(swapped));
   // 模拟旧版存档含 DIY 敌方候选名单：恢复时应保留玩家存档但排除敌方 DIY。
-  const legacy=await run(`import('/noname.js').then(({lib})=>{const key=lib.configprefix+'endless_save';const data=JSON.parse(localStorage.getItem(key));data.list=['diy_zhangchunhua','diy_wenyang','ns_zuoci',...data.list];localStorage.setItem(key,JSON.stringify(data));return data.list.slice(0,5)})`);
+  const legacy=await run(`import('/noname.js').then(({lib})=>{const key=lib.configprefix+'endless_save';const data=JSON.parse(localStorage.getItem(key));data.big=5;data.small=12;data.completed=42;data.list=['diy_zhangchunhua','diy_wenyang','ns_zuoci',...data.list.slice(0,1)];localStorage.setItem(key,JSON.stringify(data));return {big:data.big,small:data.small,list:data.list}})`);
   console.log('LEGACY_POOL_INJECTED',JSON.stringify(legacy));
   // 重载页面，走游戏自带“继续无尽存档”入口，不能重新弹技能选择器。
   await navigate();
@@ -88,15 +88,37 @@ try{
   const clicked=await run("(()=>{const x=[...document.querySelectorAll('.control>div')].find(x=>x.textContent.trim()==='继续无尽存档');x.click();return true})()");
   assert.equal(clicked,true);
   await nap(5000);
-  const restored=await run(`import('/noname.js').then(({game,_status,lib})=>({name:game.me?.name,active:game.me?.skills?.slice(),configured:_status.endlessDiySkills,save:JSON.parse(localStorage.getItem(lib.configprefix+'endless_save')||'null')?.diySkills,pickerVisible:!!document.querySelector('#endless-diy-skill-picker'),enemyCandidates:_status.endlessList.slice(),enemyNames:game.players.filter(p=>p!==game.me).map(p=>p.name)}))`);
+  const restored=await run(`import('/noname.js').then(({game,_status,lib})=>({name:game.me?.name,active:game.me?.skills?.slice(),configured:_status.endlessDiySkills,save:JSON.parse(localStorage.getItem(lib.configprefix+'endless_save')||'null')?.diySkills,pickerVisible:!!document.querySelector('#endless-diy-skill-picker'),big:_status.endlessBig,small:_status.endlessSmall,completed:_status.endlessCompleted,activeEnemyCount:game.players.filter(p=>p!==game.me).length,totalEnemySeats:game.players.length+game.dead.length-1,enemyPoolSize:_status.endlessListAll.length,enemyCandidates:_status.endlessList.slice(),enemyNames:game.players.filter(p=>p!==game.me).map(p=>p.name),resetTimer:!!window.resetGameTimeout}))`);
   console.log("RESTORED",JSON.stringify(restored));
   assert.equal(restored.name,'diy_zhangchunhua');
   assert.equal(restored.pickerVisible,false);
+  assert.equal(restored.big,5,'Restored first stage should have five enemies');
+  assert.equal(restored.small,12);assert.equal(restored.completed,42);
+  assert.equal(restored.activeEnemyCount,5,'Restored stage has wrong active enemy count');
+  assert.equal(restored.totalEnemySeats,7,'Arena must have seven available enemy seats');
+  assert.ok(restored.enemyPoolSize>60,'AI enemy pool should not be restricted to 60 characters');
+  assert.ok(restored.enemyCandidates.length>60,'Legacy small save pool should be expanded');
+  assert.equal(restored.resetTimer,false,'Loading watchdog must be disabled after picker is interactive');
   assert.ok(restored.enemyCandidates.every(n=>!n.startsWith('diy_')&&!['ns_zuoci'].includes(n)),'Legacy AI pool still contains DIY');
   assert.ok(restored.enemyNames.every(n=>!n.startsWith('diy_')&&!['ns_zuoci'].includes(n)),'Restored enemy contains DIY');
   assert.deepEqual([...restored.active].sort(),[...picker.after].sort());
   assert.deepEqual([...restored.configured].sort(),[...picker.after].sort());
   assert.deepEqual([...restored.save].sort(),[...picker.after].sort());
+  const variety=await run(`import('/noname.js').then(({game,_status})=>{const old=_status.endlessList;const candidates=old.slice(0,90);_status.endlessList=candidates.slice();const picks=Array.from({length:90},()=>game.getEndlessCharacter());const remaining=_status.endlessList.length;_status.endlessList=old;return {unique:new Set(picks).size,count:picks.length,remaining}})`);
+  console.log('VARIETY',JSON.stringify(variety));
+  assert.deepEqual(variety,{unique:90,count:90,remaining:0},'Enemy candidates repeat before full pool is consumed');
+  // 检验最高难度与历史存档空候选池：不能删除存档，读档首关应恢复七名敌人。
+  const emptyEnemyPool=await run(`import('/noname.js').then(({lib})=>{const key=lib.configprefix+'endless_save';const save=JSON.parse(localStorage.getItem(key));save.big=7;save.small=3;save.list=[];localStorage.setItem(key,JSON.stringify(save));return {big:save.big,small:save.small,list:save.list}})`);
+  await navigate();
+  await until("[...document.querySelectorAll('.control>div')].some(x=>x.textContent.trim()==='继续无尽存档')");
+  // 人为等超过原加载超时10秒，确保真正进入交互界面后不会出现误报“重置游戏”。
+  await nap(11000);
+  assert.ok(!dialogs.some(s=>s.includes('未正常载入')||s.includes('重置游戏')),'Watchdog fired while user was choosing a save');
+  await run("(()=>{[...document.querySelectorAll('.control>div')].find(x=>x.textContent.trim()==='继续无尽存档').click()})()");
+  await nap(4800);
+  const restoredSeven=await run(`import('/noname.js').then(({game,_status})=>({big:_status.endlessBig,small:_status.endlessSmall,enemies:game.players.filter(p=>p!==game.me).length,pool:_status.endlessList.length,distinct:new Set(game.players.filter(p=>p!==game.me).map(p=>p.name)).size}))`);
+  console.log('RESTORED_SEVEN',JSON.stringify({emptyEnemyPool,restoredSeven}));
+  assert.equal(restoredSeven.big,7);assert.equal(restoredSeven.small,3);assert.equal(restoredSeven.enemies,7);assert.equal(restoredSeven.distinct,7);assert.ok(restoredSeven.pool>60);
   // “开始新游戏”必须重新展示默认全选的20项，而不继承上一存档的3项。
   await navigate();
   await until("[...document.querySelectorAll('.control>div')].some(x=>x.textContent.trim()==='开始新的无尽游戏')");
@@ -118,8 +140,9 @@ try{
   await nap(4000);
   const emptyRestored=await run(`import('/noname.js').then(({game,_status})=>({active:game.me.skills.slice(),config:_status.endlessDiySkills,picker:!!document.querySelector('#endless-diy-skill-picker')}))`);
   assert.deepEqual(emptyRestored,{active:[],config:[],picker:false});
+  assert.ok(!dialogs.some(s=>s.includes('未正常载入')||s.includes('重置游戏')),'Unexpected game loading reset prompt');
   assert.deepEqual(errors,[]);
   console.log("EMPTY_SELECTION",JSON.stringify({emptySelection,emptySave,emptyRestored}));
-  console.log("ENDLESS_DIY_SKILL_PICKER",JSON.stringify({success:true,picker,first:snap.active.length,reinit:swapped.active.length,restored:restored.active.length,newGameDefault:reset.checked,emptyPersisted:emptyRestored.active.length,errors}));
+  console.log("ENDLESS_DIY_SKILL_PICKER",JSON.stringify({success:true,picker,first:snap.active.length,reinit:swapped.active.length,restored:restored.active.length,newGameDefault:reset.checked,emptyPersisted:emptyRestored.active.length,restoredBig:restored.big,restoredEnemies:restored.activeEnemyCount,restoredSevenEnemies:restoredSeven.enemies,variety:variety.unique,dialogs,errors}));
 } catch(e){console.error("ENDLESS_DIY_SKILL_PICKER",JSON.stringify({success:false,error:String(e),errors}));process.exitCode=1}
 finally{ws.close()}
