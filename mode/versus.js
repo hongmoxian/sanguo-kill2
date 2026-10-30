@@ -954,7 +954,7 @@ export default () => {
 					lib.dynamicTranslate.dcliuzhuan = owner => {
 						const description = lib.translate.dcliuzhuan_info || "";
 						if (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua") {
-							return description.replace("不于摸牌阶段而得到的牌", "（包括摸牌阶段）得到的牌") + "④其他角色阵亡时，你获得其手中带‘转’的牌。";
+							return description.replace("不于摸牌阶段而得到的牌", "（包括摸牌阶段）得到的牌") + "④其他角色阵亡时，你获得其手中带‘转’的牌。⑤其他角色的回合结束时，其手牌中仍带‘转’的牌全部弃置，然后你获得之。";
 						}
 						return description;
 					};
@@ -1042,10 +1042,40 @@ export default () => {
 							},
 						};
 					}
+					// phaseEnd 是结束阶段之后、phaseAfter 清除临时“转”标记之前。
+					// 其他角色回合结束时未使用的“转”手牌必须弃置，再由流转的 loseAfter 回收。
+					if (!lib.skill.diy_endless_liuzhuan_turnend) {
+						lib.skill.diy_endless_liuzhuan_turnend = {
+							trigger: { global: "phaseEnd" },
+							forced: true,
+							lastDo: true,
+							priority: -10,
+							popup: false,
+							silent: true,
+							filter(event, owner) {
+								const isDiy = owner && (owner.name === "diy_zhangchunhua" || owner.name1 === "diy_zhangchunhua" || owner.name2 === "diy_zhangchunhua");
+								return _status.mode === "endless" && isDiy && owner.hasSkill("dcliuzhuan") &&
+									event.player && event.player !== owner && event.player.isIn() &&
+									event.player.getCards("h").some(card => card.hasGaintag("dcliuzhuan_tag"));
+							},
+							content() {
+								"step 0";
+								// 先走正常弃牌事件，让割圆、流转与落英按照既有优先级结算。
+								event.liuzhuanTurnendCards = trigger.player.getCards("h").filter(card => card.hasGaintag("dcliuzhuan_tag"));
+								if (event.liuzhuanTurnendCards.length) trigger.player.discard(event.liuzhuanTurnendCards);
+								"step 1";
+								// 部分引擎流程在回合结束时会清理临时标签，使流转通过筛选却未完成回收。
+								// 仅拾取仍在弃牌堆的本次“转”牌，避免重复取得已被其他技能获得的牌。
+								const unrecovered = event.liuzhuanTurnendCards.filter(card => get.position(card, true) === "d");
+								if (unrecovered.length) player.gain(unrecovered, "gain2");
+							},
+						};
+					}
 					// 注册为流转的隐藏关联技能，不额外占用玩家勾选的20项技能名额。
 					const mainSkill = lib.skill.dcliuzhuan;
-					if (mainSkill && !mainSkill.group?.includes("diy_endless_liuzhuan_deathgain")) {
-						mainSkill.group = [...(mainSkill.group || []), "diy_endless_liuzhuan_deathgain"];
+					if (mainSkill) {
+						const groups = ["diy_endless_liuzhuan_deathgain", "diy_endless_liuzhuan_turnend"];
+						mainSkill.group = [...new Set([...(mainSkill.group || []), ...groups])];
 					}
 				}
 				// Ensure DIY skills are present after every endless-mode reinitialization.
