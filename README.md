@@ -99,7 +99,7 @@ node tests/diy_zhangchunhua.skill.test.mjs
 - **高关卡读档与重复率回归通过**：第 **5-12 关读档后首关为 5 名敌人**；第 **7-3 关、敌将池为空的旧存档**可恢复并出现 7 名不同敌人。完整候选池超过旧版的 60 人限制，模拟连续抽取 90 名敌将均不重复；停留读档界面超过 10 秒没有触发重置提示。
 - 对 **480×360、360×560、1280×720** 三种视口检查了技能列表内部滚动、末项可达和底部确认按钮可见。
 
-Chrome 测试要求：先启动本地服务器（8089），再使用**独立浏览器用户目录**启动支持 Chrome DevTools Protocol 的 Chrome（9252），最后依次运行：
+Chrome 测试要求：先启动本地服务器（8089），再使用**独立浏览器用户目录**启动支持 Chrome DevTools Protocol 的 Chrome（9252），最后依次运行。**所有自动化测试必须默认静音**：包括背景音乐、武将语音和技能音效；使用 `--mute-audio` 静音整个测试 Chrome，不修改日常游戏设置。
 
 ```powershell
 node tests/diy_zhangchunhua.chrome.smoke.mjs
@@ -111,10 +111,16 @@ node tests/endless_diy_skill_selection.chrome.test.mjs
 node tests/endless_hp_restore.chrome.test.mjs
 ```
 
-例如在 Windows 安装 Chrome 的默认路径下，可另开终端执行：
+推荐使用项目内置的**静音测试浏览器启动脚本**（独立测试用户目录，不触碰日常存档）：
 
 ```powershell
-& "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless=new --disable-gpu --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required --remote-debugging-port=9252 --user-data-dir="$env:TEMP\noname-cdp-test" about:blank
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/start-muted-chrome.ps1
+```
+
+也可以手动启动 Chrome，但**必须保留 `--mute-audio` 参数**：
+
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless=new --mute-audio --disable-gpu --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required --remote-debugging-port=9252 --user-data-dir="$env:TEMP\noname-cdp-muted-test" about:blank
 ```
 
 （自动化脚本会在这个**独立测试浏览器目录**中创建新游戏、修改测试存档；不要将 `--user-data-dir` 指向日常游戏的浏览器资料。Node.js 函数测试不等同于所有技能组合的完整长期实战验证。）
