@@ -1,0 +1,110 @@
+/* DIY 张春华【流转】—中央大幅、淡紫浅金、无交互阻塞特效 */
+.lz-overlay {
+  position: fixed; inset: 0; z-index: 110000; pointer-events: none;
+  overflow: hidden; isolation: isolate;
+  font-family: "KaiTi", "STKaiti", "FangSong", serif;
+  animation: lz-enter .20s ease-out both;
+}
+.lz-overlay.lz-fading { animation: lz-exit .25s ease-in both; }
+.lz-veil { position: absolute; inset: 0;
+  background: radial-gradient(ellipse 42% 40% at 50% 49%, rgba(247,242,254,.31), rgba(251,247,254,.12) 58%, transparent 95%);
+}
+.lz-stage {
+  position: absolute; left: 50%; top: 48%; transform: translate(-50%,-50%);
+  width: min(76vw, 730px); height: min(54vh, 415px); min-width: min(90vw, 280px);
+  display: grid; place-items: center;
+  background: radial-gradient(ellipse 55% 52% at center, rgba(249,244,255,.73), rgba(249,247,254,.41) 57%, transparent 82%);
+}
+.lz-halo {
+  position: absolute; width: clamp(150px, 30vw, 272px); aspect-ratio: 1;
+  border-radius: 50%; border: 1.5px solid rgba(177,161,214,.43);
+  box-shadow: 0 0 42px rgba(210,199,239,.26), inset 0 0 28px rgba(206,220,239,.24);
+  animation: lz-halo 1.4s ease-out both;
+}
+.lz-halo::before, .lz-halo::after {
+  content: ""; position: absolute; inset: 12px; border: 1px dashed rgba(210,181,215,.4); border-radius: 50%;
+}
+.lz-halo::after { inset: 24px; border-style: solid; border-color: rgba(222,203,168,.49); }
+.lz-arc {
+  position:absolute; width: min(58vw, 440px); height: min(37vw, 280px);
+  border-top: 2px solid rgba(187,170,220,.49);
+  border-bottom: 1px solid rgba(180,213,228,.50);
+  border-radius:50%; transform: rotate(-19deg);
+  filter:drop-shadow(0 0 9px rgba(196,187,227,.3));
+  animation: lz-arc 1.4s ease-in-out both;
+}
+.lz-arc2 {
+  width: min(47vw, 355px); height: min(43vw, 320px); transform: rotate(67deg);
+  border-color: rgba(226,208,176,.58); animation-delay: .07s;
+}
+.lz-titlewrap { position: relative; z-index: 1; text-align: center; animation: lz-title 1.4s ease-out both; }
+.lz-title {
+  color: #a797c6; font-size: clamp(53px, 7.5vw, 96px);
+  font-weight: 600; line-height: 1.16; letter-spacing: .15em; padding-left: .15em;
+  text-shadow: 0 0 24px rgba(214,199,242,.73), 0 2px 2px rgba(255,255,255,.94);
+}
+.lz-subtitle {
+  margin-top: 14px; color: rgba(146,133,170,.75);
+  font: 500 clamp(11px, 1.15vw, 16px) "Microsoft YaHei", sans-serif;
+  letter-spacing: .35em; padding-left: .35em;
+}
+.lz-badge {
+  margin: 13px auto 0; width: fit-content; border-radius: 100px;
+  border: 1px solid rgba(200,182,216,.5); padding: 4px 13px;
+  background: rgba(255,255,255,.57); color: #9884b7;
+  font: 600 12px "Microsoft YaHei", sans-serif;
+}
+.lz-badge[hidden] {display:none}
+.lz-spark {
+  position: absolute; left: 50%; top: 50%; width: 4px; height: 4px;
+  background: rgba(198,176,230,.8); box-shadow: 0 0 12px 4px rgba(221,204,245,.36);
+  border-radius: 50%; animation: lz-spark 1.1s ease-in-out both; animation-delay: var(--lz-delay);
+}
+.lz-comet {
+  position: absolute; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.99), rgba(195,178,229,.79) 40%, transparent 78%);
+  filter:drop-shadow(0 0 8px rgba(189,175,225,.8)); will-change: transform, opacity;
+}
+.lz-mark {
+  position: fixed; z-index: 110001; pointer-events:none; transform: translateX(-50%);
+  background: rgba(252,249,255,.9); border: 1px solid rgba(197,182,215,.47);
+  border-radius: 30px; padding: 3px 12px; color: #a492c0;
+  box-shadow: 0 0 18px rgba(201,183,222,.2);
+  font: 600 19px "KaiTi","STKaiti",serif;
+  animation: lz-mark .7s ease-out both;
+}
+@keyframes lz-enter {from{opacity:0}to{opacity:1}}
+@keyframes lz-exit {from{opacity:1}to{opacity:0}}
+@keyframes lz-halo {
+  0%{opacity:0;transform:scale(.62) rotate(-44deg)}
+  30%{opacity:1} 72%{opacity:1}
+  100%{opacity:0;transform:scale(1.32) rotate(77deg)}
+}
+@keyframes lz-arc {
+  0%{opacity:0;scale:.70} 40%{opacity:1}
+  100%{opacity:0;scale:1.28}
+}
+@keyframes lz-title {
+  0%,12%{opacity:0;transform:scale(.87) translateY(15px);filter:blur(8px)}
+  40%{opacity:1;transform:scale(1.04);filter:blur(0)}
+  75%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(1.07) translateY(-5px)}
+}
+@keyframes lz-spark {
+  0%{opacity:0;transform:rotate(var(--lz-angle)) translateX(28px) scale(.2)}
+  28%{opacity:1}
+  100%{opacity:0;transform:rotate(var(--lz-angle)) translateX(var(--lz-distance)) scale(.7)}
+}
+@keyframes lz-mark {
+  0%{opacity:0;translate:0 8px;scale:.8}
+  20%,65%{opacity:.98;scale:1}
+  100%{opacity:0;translate:0 -24px}
+}
+@media (prefers-reduced-motion:reduce) {
+ .lz-overlay *, .lz-mark {animation-duration:.32s!important;animation-delay:0ms!important}
+}
+@media (max-width:580px) {
+ .lz-stage{height:min(42vh,300px);width:96vw}
+ .lz-arc{width:86vw;height:45vw}
+ .lz-arc2{width:64vw;height:52vw}
+}

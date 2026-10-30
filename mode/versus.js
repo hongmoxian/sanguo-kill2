@@ -6,6 +6,9 @@ import huicuiSkills from "../character/huicui/skill.js?v=20261027-liuzhuan";
 import yijiangTranslate from "../character/yijiang/translate.js?v=20260829-endless63";
 import shenhuaTranslate from "../character/shenhua/translate.js?v=20260829-endless63";
 import huicuiTranslate from "../character/huicui/translate.js?v=20261027-liuzhuan";
+import { playLiuzhuanEffect } from "../game/effects/liuzhuan.js?v=20261030-1";
+// step 编译器中的技能执行上下文不能直接引用顶层 import，放入 lib 供技能调用。
+lib.endlessLiuzhuanEffect = playLiuzhuanEffect;
 export const type = "mode";
 // start() 的 step 风格 content 由 StepCompiler 在受限作用域内重新执行，
 // 模块顶层的 import 变量在其中不可见，因此挂到 lib 上供 step 内容访问。
@@ -941,6 +944,15 @@ export default () => {
 						audio: "dcliuzhuan",
 						popup: true,
 						silent: false,
+						content: function () {
+							// 保留原版标记行为，视觉提示仅在成功标记后播放。
+							trigger.gaintag.add("dcliuzhuan_tag");
+							trigger.player.addTempSkill("dcliuzhuan_tag");
+							const diyOwner = player && (player.name === "diy_zhangchunhua" || player.name1 === "diy_zhangchunhua" || player.name2 === "diy_zhangchunhua");
+							if (_status.mode === "endless" && diyOwner && player.hasSkill("dcliuzhuan")) {
+								lib.endlessLiuzhuanEffect?.({ kind: "mark", source: trigger.player, target: player });
+							}
+						},
 						// DIY 强化：包括其他角色自己摸牌阶段内的 gainBegin。
 						// 其余角色（含刘巴）仍遵循原版“摸牌阶段不标转”。
 						filter(event, owner) {
@@ -988,9 +1000,31 @@ export default () => {
 								if (diyOwner(player) && trigger.name === "lose") {
 									const cards = transferredHandCards(trigger);
 									if (cards.length) {
+										lib.endlessLiuzhuanEffect?.({ kind: "gain", source: trigger.player, target: player, count: cards.length });
 										player.gain(cards, "gain2");
 										return;
 									}
+								}
+								if (diyOwner(player) && _status.currentPhase) {
+									// 严格镜像原版寻找可回收转牌的条件；没找到真正待回收的牌时不误播动画。
+									const current = _status.currentPhase;
+									let matching = [];
+									if (trigger.name === "cardsDiscard") {
+										const parent = trigger.getParent();
+										const related = parent.relatedEvent || parent.getParent();
+										const history = current.getHistory("lose", ev => {
+											const origin = ev.relatedEvent || ev.getParent();
+											return origin === related && Object.values(ev.gaintag_map || {}).some(tags => tags.includes("dcliuzhuan_tag"));
+										});
+										matching = (trigger.cards || []).filter(card => history.some(ev => ev.gaintag_map?.[card.cardid]?.includes("dcliuzhuan_tag")) && get.position(card, true) === "d");
+									} else {
+										current.getHistory("lose", ev => {
+											if (ev.getParent() !== trigger || ev.position !== ui.discardPile) return false;
+											matching.push(...(ev.hs || []).filter(card => ev.gaintag_map?.[card.cardid]?.includes("dcliuzhuan_tag") && get.position(card, true) === "d"));
+											return false;
+										});
+									}
+									if (matching.length) lib.endlessLiuzhuanEffect?.({ kind: "gain", source: current, target: player, count: matching.length });
 								}
 								return originalGainContent.apply(this, arguments);
 							},
@@ -1037,6 +1071,7 @@ export default () => {
 									// 收回后这些牌不应继续携带敌方的临时“转”标签。
 									trigger.player.removeGaintag("dcliuzhuan_tag", cards);
 									game.trySkillAudio("dcliuzhuan_gain", player);
+									lib.endlessLiuzhuanEffect?.({ kind: "gain", source: trigger.player, target: player, count: cards.length });
 									player.gain(cards, trigger.player, "gain2");
 								}
 							},
@@ -1067,7 +1102,10 @@ export default () => {
 								// 部分引擎流程在回合结束时会清理临时标签，使流转通过筛选却未完成回收。
 								// 仅拾取仍在弃牌堆的本次“转”牌，避免重复取得已被其他技能获得的牌。
 								const unrecovered = event.liuzhuanTurnendCards.filter(card => get.position(card, true) === "d");
-								if (unrecovered.length) player.gain(unrecovered, "gain2");
+								if (unrecovered.length) {
+									lib.endlessLiuzhuanEffect?.({ kind: "gain", source: trigger.player, target: player, count: unrecovered.length });
+									player.gain(unrecovered, "gain2");
+								}
 							},
 						};
 					}

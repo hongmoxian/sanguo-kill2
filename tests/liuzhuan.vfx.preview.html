@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>流转特效预览 | 本地调试</title>
+<style>
+  body { margin:0; min-height:100vh; font:14px "Microsoft YaHei",sans-serif; background: radial-gradient(circle at 40% 55%,#71879a,#293b55 75%); color:white; overflow:hidden }
+  #demo { display:flex; justify-content:space-between; align-items:center; height:70vh; max-width:1050px; margin:auto; padding:2vw }
+  .actor {width:125px;height:184px;border:1px solid #cbbbd5;border-radius:12px;background:linear-gradient(140deg,#b1bfd3,#747d95);box-shadow:0 12px 45px #161d2a88;display:flex;align-items:flex-end;justify-content:center;padding:18px;box-sizing:border-box;color:#fff}
+  #controls {position:fixed;left:50%;bottom:8%;transform:translateX(-50%);display:flex;gap:12px;z-index:2}
+  button {background:#fff;border:1px solid #e0d5e9;border-radius:8px;padding:12px 18px;cursor:pointer;color:#7b668e;font-weight:bold}
+  p {text-align:center;color:#c6d2e5}
+</style></head><body>
+<p>DIY 张春华「流转」特效 · 浅紫金色中央大动画 · 独立预览页（不操作存档）</p>
+<div id="demo"><div class="actor" id="enemy">敌方角色</div><div class="actor" id="hero">DIY 张春华</div></div>
+<div id="controls"><button id="mark">标记小提示</button><button id="gain">回收 3 张（完整特效）</button></div>
+<script type="module">
+import { playLiuzhuanEffect } from "/game/effects/liuzhuan.js?v=20261030-1";
+window.previewLiuzhuan = playLiuzhuanEffect;
+document.querySelector("#mark").addEventListener("click", () => playLiuzhuanEffect({kind:"mark",source:document.querySelector("#enemy")}));
+document.querySelector("#gain").addEventListener("click", () => playLiuzhuanEffect({kind:"gain",source:document.querySelector("#enemy"),target:document.querySelector("#hero"),count:3}));
+</script></body></html>
