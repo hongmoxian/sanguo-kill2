@@ -113,8 +113,9 @@ export default () => {
 			if (_status.mode == "endless") {
 				_status.endlessCharacterChosen = false;
 				_status.endlessSelectionPending = false;
-				// 新一轮启动只从当前存档恢复技能配置，不沿用上一次对局的内存状态。
+				// 新一轮启动只从存档恢复技能和各武将血量，不沿用旧对局内存。
 				delete _status.endlessDiySkills;
+				delete _status.endlessHealthByCharacter;
 			}
 			"step 1";
 			var playback = localStorage.getItem(lib.configprefix + "playback");
@@ -874,6 +875,11 @@ export default () => {
 						this.clearEndlessSave();
 						return null;
 					}
+					// 首次使用修复后的版本时备份原始存档；不覆盖历史备份，不影响正常读档。
+					try {
+						var backupKey = lib.configprefix + "endless_save_pre_health_fix_backup";
+						if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, localStorage.getItem(lib.configprefix + "endless_save"));
+					} catch (backupError) {}
 					var list = Array.isArray(save.list) ? save.list.filter(name => typeof name == "string") : [];
 					// 候选池为空或不足3人是正常的长局情况，不能因此删除整份进度存档。
 					// 读档时会基于完整非 DIY 武将库补齐尚未候选的角色。
@@ -886,20 +892,72 @@ export default () => {
 			clearEndlessSave: function () {
 				localStorage.removeItem(lib.configprefix + "endless_save");
 			},
+			// 各备用武将分别保存当前体力、体力上限和护甲；拒绝 NaN/缺失值覆盖有效旧档。
+			endlessHealthSnapshot: function (source) {
+				if (!source) return null;
+				var maxHp = Number(source.maxHp);
+				var hp = Number(source.hp);
+				// 临时濒死的 0/负体力不作为可读档的存活状态覆盖上一次有效快照。
+				if (!Number.isFinite(maxHp) || maxHp <= 0 || !Number.isFinite(hp) || hp <= 0) return null;
+				var hujia = Number(source.hujia);
+				return {
+					maxHp: maxHp,
+					hp: Math.min(hp, maxHp),
+					hujia: Number.isFinite(hujia) && hujia > 0 ? hujia : 0,
+				};
+			},
+			rememberEndlessHealth: function (player) {
+				if (!player || !player.name1) return null;
+				var health = game.endlessHealthSnapshot(player);
+				if (!health) return null;
+				if (!_status.endlessHealthByCharacter) _status.endlessHealthByCharacter = {};
+				_status.endlessHealthByCharacter[player.name1] = health;
+				return health;
+			},
+			restoreEndlessHealth: function (player, savedHealth) {
+				var health = game.endlessHealthSnapshot(savedHealth);
+				if (!player || !health || health.hp <= 0) return false;
+				// 防止 update() 自动缓存半初始化的数值。
+				player._endlessHealthInitializing = true;
+				try {
+					player.maxHp = health.maxHp;
+					player.hp = health.hp;
+					player.hujia = health.hujia;
+					player.update();
+				} finally {
+					delete player._endlessHealthInitializing;
+				}
+				return true;
+			},
+			watchEndlessHealth: function (player) {
+				if (!player || player._endlessHealthWatching) return;
+				var originalUpdate = player.update;
+				player.update = function (...args) {
+					var result = originalUpdate.apply(this, args);
+					if (_status.mode !== "endless" || !_status.endlessCharacterChosen || _status.endlessRestore ||
+						this !== game.me || !this.side || this._endlessHealthInitializing || !this.name1) return result;
+					var health = game.endlessHealthSnapshot(this);
+					var previous = _status.endlessHealthByCharacter?.[this.name1];
+					if (health && (!previous || previous.hp !== health.hp || previous.maxHp !== health.maxHp || previous.hujia !== health.hujia)) {
+						game.cacheEndlessProgress(this);
+					}
+					return result;
+				};
+				player._endlessHealthWatching = true;
+			},
 			cacheEndlessProgress: function (player) {
-				if (_status.mode != "endless" || !player || !player.name1) return;
+				if (_status.mode != "endless" || !player || !player.name1 || player._endlessHealthInitializing) return;
+				var health = game.rememberEndlessHealth(player);
+				if (!health) return;
 				var save = {
 					version: 1,
 					big: _status.endlessBig || 3,
 					small: _status.endlessSmall || 1,
 					completed: _status.endlessCompleted || 0,
 					shaBonus: _status.endlessShaBonus || 0,
-					player: {
-						name: player.name1,
-						hp: player.hp,
-						maxHp: player.maxHp,
-						hujia: player.hujia || 0,
-					},
+					player: { name: player.name1, ...health },
+					// 与 active player 分开保存每名备用武将的生命状态，换将后可恢复。
+					healthByCharacter: { ..._status.endlessHealthByCharacter },
 					reserve: (_status.endlessReserve || []).slice(0),
 					list: (_status.endlessList || []).slice(0),
 					// null=未配置（非 DIY 对局）；[]=主动关闭全部技能，不能与缺失字段混淆。
@@ -909,6 +967,10 @@ export default () => {
 			},
 			endlessInitCharacter: function (player, name, side) {
 				if (!player) return;
+				// 换将时先记录离场武将的受伤状态，再恢复即将上场武将自己的状态。
+				if (side && _status.endlessCharacterChosen && player.name1 && player.hp > 0) game.rememberEndlessHealth(player);
+				var savedHealth = side ? _status.endlessHealthByCharacter?.[name] : null;
+				if (side) player._endlessHealthInitializing = true;
 				// 防止敌方因旧存档、异常武将池或外部调用而初始化成 DIY 武将。
 				if (!side && !game.isEndlessEnemyCharacter(name)) name = "re_guojia";
 				// Skill triggers are only registered for players that already have a playerid.
@@ -1140,6 +1202,12 @@ export default () => {
 				// Endless reserve swapping is handled at major-stage boundaries, not as
 				// a per-turn character skill.
 				player.removeSkill("endless_swap");
+				if (side) {
+					if (savedHealth) game.restoreEndlessHealth(player, savedHealth);
+					delete player._endlessHealthInitializing;
+					// 换将当场更新存档，不能等到下一个关卡通关。
+					if (_status.endlessCharacterChosen && player === game.me) game.cacheEndlessProgress(player);
+				}
 			},
 			endlessDeactivate: function (player) {
 				if (!player || game.dead.includes(player)) return;
@@ -2245,13 +2313,23 @@ export default () => {
 					_status.endlessBig = restore ? Math.min(7, Math.max(3, Number(saved.big) || 3)) : 3;
 					_status.endlessSmall = restore ? Math.max(1, Number(saved.small) || 1) : 1;
 					_status.endlessLevel = _status.endlessBig;
-					game.endlessInitCharacter(game.players[0], selected[0], true);
-					if (restore && saved.player) {
-						game.players[0].maxHp = saved.player.maxHp;
-						game.players[0].hp = saved.player.hp;
-						game.players[0].hujia = saved.player.hujia || 0;
-						game.players[0].update();
+					// 从旧版 player.hp/maxHp 及新版各武将状态表恢复；先于 init 执行，
+					// 避免选将初始化把旧档的已损体力和累计增加的上限覆盖。
+					_status.endlessHealthByCharacter = {};
+					if (restore) {
+						for (var characterName of selected) {
+							var previousHealth = game.endlessHealthSnapshot(saved.healthByCharacter?.[characterName]);
+							if (previousHealth && previousHealth.hp > 0) _status.endlessHealthByCharacter[characterName] = previousHealth;
+						}
+						var activeHealth = game.endlessHealthSnapshot(saved.player);
+						if (saved.player?.name === selected[0] && activeHealth && activeHealth.hp > 0) {
+							_status.endlessHealthByCharacter[selected[0]] = activeHealth;
+						}
 					}
+					game.endlessInitCharacter(game.players[0], selected[0], true);
+					// 监听 player.update()：受伤、回复、体力上限和护甲变化即时同步存档。
+					// 安装在角色初始化完成后，防止角色默认血量误写覆盖原有存档。
+					game.watchEndlessHealth(game.players[0]);
 					// 只初始化一次敌将：过去这里先给7个座位抽将，随后 PrepareEnemies 又
 					// 重抽一批，开局白白消耗10名候选，加剧后续敌将重复。
 					game.endlessPrepareEnemies(false);
